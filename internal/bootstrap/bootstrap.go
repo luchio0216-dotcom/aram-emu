@@ -145,7 +145,7 @@ func Install(archivePath string) (string, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", fmt.Errorf("inspect runtime target: %w", err)
 	}
-	if err := os.Rename(temporary, directory); err != nil {
+	if err := activateRuntime(temporary, directory); err != nil {
 		return "", fmt.Errorf("activate installed runtime: %w", err)
 	}
 	keepTemporary = true
