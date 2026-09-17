@@ -2,6 +2,7 @@ package integration
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -62,42 +63,90 @@ func (backend *Backend) saveDataFileFor(hash string) (string, error) {
 // restoreSaveData loads a title's persisted writable storage into a freshly
 // opened machine before it starts, so the guest's first read observes its
 // saves. A missing file (first launch) is not an error.
-func (backend *Backend) restoreSaveData(machine aramcore.Machine, hash string) {
+func (backend *Backend) restoreSaveData(machine aramcore.Machine, hash string) error {
 	capability, ok := saveDataFrom(machine)
 	if !ok {
-		return
+		return nil
 	}
 	path, err := backend.saveDataFileFor(hash)
 	if err != nil {
-		return
+		return fmt.Errorf("resolve game save path: %w", err)
 	}
 	data, err := os.ReadFile(path)
-	if err != nil {
-		return
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
-	_ = capability.ImportSaveData(data)
+	if err != nil {
+		return fmt.Errorf("read game save data: %w", err)
+	}
+	if err := capability.ImportSaveData(data); err != nil {
+		return fmt.Errorf("import game save data: %w", err)
+	}
+	return nil
 }
 
 // persistSaveData writes a title's writable storage to its per-title file. An
 // empty export writes nothing, so a title that never saved leaves no file.
-func (backend *Backend) persistSaveData(machine aramcore.Machine, hash string) {
+func (backend *Backend) persistSaveData(machine aramcore.Machine, hash string) error {
 	capability, ok := saveDataFrom(machine)
 	if !ok {
-		return
+		return nil
 	}
 	data, err := capability.ExportSaveData()
-	if err != nil || len(data) == 0 {
-		return
+	if err != nil {
+		return fmt.Errorf("export game save data: %w", err)
+	}
+	return backend.writeSaveData(hash, data)
+}
+
+func (backend *Backend) writeSaveData(hash string, data []byte) error {
+	if len(data) == 0 {
+		return nil
 	}
 	path, err := backend.saveDataFileFor(hash)
 	if err != nil {
-		return
+		return fmt.Errorf("resolve game save path: %w", err)
 	}
 	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, data, 0o600); err != nil {
-		return
+	file, err := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create temporary game save: %w", err)
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	committed := false
+	defer func() {
+		if !committed {
+			_ = file.Close()
+			_ = os.Remove(temporary)
+		}
+	}()
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("write temporary game save: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync temporary game save: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close temporary game save: %w", err)
+	}
+	if err := replaceFileCrashSafely(temporary, path); err != nil {
 		_ = os.Remove(temporary)
+		return fmt.Errorf("replace game save: %w", err)
 	}
+	committed = true
+	return nil
+}
+
+// FlushSaveData snapshots the loaded title's writable storage without stopping
+// it. Mobile hosts call this during an Activity pause because Android may kill
+// the process after it enters the background without giving the Go shell a
+// normal close path.
+func (backend *Backend) FlushSaveData() error {
+	backend.operationMu.Lock()
+	defer backend.operationMu.Unlock()
+
+	machine := backend.currentMachine()
+	if machine == nil {
+		return nil
+	}
+	return backend.persistSaveData(machine, backend.currentInputHash())
 }

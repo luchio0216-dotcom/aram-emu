@@ -22,8 +22,9 @@ import (
 var game productGame
 
 type productGame struct {
-	once  sync.Once
-	shell *frontend.Shell
+	once    sync.Once
+	shell   *frontend.Shell
+	backend *productBackend
 }
 
 func (g *productGame) Update() error {
@@ -40,13 +41,21 @@ func (g *productGame) Layout(width, height int) (int, int) {
 
 func (g *productGame) instance() *frontend.Shell {
 	g.once.Do(func() {
+		g.backend = &productBackend{Backend: integration.NewBackend(nil)}
 		g.shell = frontend.NewShell(
-			&productBackend{Backend: integration.NewBackend(nil)},
+			g.backend,
 			frontend.NewPlatformPicker(),
 			"",
 		)
 	})
 	return g.shell
+}
+
+func (g *productGame) flushSaveData() {
+	shell := g.instance()
+	if err := g.backend.FlushSaveData(); err != nil {
+		shell.ReportExternalOpenStatus("Game save: " + err.Error())
+	}
 }
 
 // productBackend adds product installation to the integration backend. The
@@ -78,9 +87,8 @@ type Host interface {
 	// DocumentKindSaveBackup. The answer comes back through OpenDocument,
 	// OpenFirmware, OpenSaveBackup or DocumentSelectionCanceled.
 	RequestDocument(kind string)
-	// ShareFile hands one file below the app's private storage to another
-	// app. A save backup is written into private storage, so this is the only
-	// way it reaches a place that survives uninstalling the app.
+	// ShareFile exports one file below the app's private storage through the
+	// platform document UI, so the user can keep it in accessible storage.
 	ShareFile(path, mimeType, title string) error
 	// InstallPackage hands a verified product package below the configured
 	// update folder to the platform installer. An error reports that the
@@ -234,9 +242,12 @@ func SetControllerConnected(connected bool) {
 	game.instance().SetControllerConnected(connected)
 }
 
-// Pause and Resume mirror native Activity lifecycle transitions.
+// Pause and Resume mirror native Activity lifecycle transitions. Pause also
+// flushes guest storage because Android may kill a background process without
+// ever running the desktop-style backend close path.
 func Pause() {
 	game.instance().SetHostActive(false)
+	game.flushSaveData()
 }
 
 func Resume() {

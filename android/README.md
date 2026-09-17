@@ -9,6 +9,7 @@ is not the standalone frontend preview: the AAR statically includes the pinned
 - Ebitengine view and Activity lifecycle;
 - Go mobile context and app-private settings initialization;
 - Storage Access Framework document selection;
+- Storage Access Framework create-document export for backups and debug ZIPs;
 - private, bounded copies of provider documents for the Go backend;
 - incoming View/Send document intents;
 - verified `aram.mir.sh/player/` App Links and `aram://open` deep links;
@@ -27,7 +28,7 @@ New-Item -ItemType Directory -Force android/app/libs | Out-Null
 ebitenmobile bind -target android/arm64,android/amd64 -androidapi 23 -trimpath `
   -ldflags="-s -w" -javapkg io.github.mirusu400.aram `
   -o android/app/libs/aram.aar ./mobile
-gradle --no-daemon -p android :app:lintDebug :app:assembleDebug
+gradle --no-daemon -p android :app:lintGithubDebug :app:assembleGithubDebug
 ```
 
 The Gradle build derives its density-specific and adaptive launcher icons from
@@ -91,9 +92,16 @@ Privacy options button whenever UMP requires a persistent entry point. In the
 AdMob console, create and publish the required Privacy & messaging messages
 for the Play app before release.
 
-Frontend settings and debug exports use the app-private `files/config`
-directory. The Activity initializes the Go runtime context and this storage
-root before Ebitengine creates the shared frontend shell.
+Frontend settings and working artifact files use the app-private
+`files/config` directory. The Activity initializes the Go runtime context and
+this storage root before Ebitengine creates the shared frontend shell. Save
+backups and debug ZIPs are then copied through the system create-document UI to
+a Documents, Downloads, or cloud-provider location selected by the user.
+
+When the Activity pauses, the Go bridge flushes the running title's writable
+storage into its SHA-256-keyed private save file. This covers Android process
+death after backgrounding, where the desktop-style backend close path may
+never run.
 
 ## In-app product updates
 

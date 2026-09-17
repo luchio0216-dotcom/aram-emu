@@ -2,6 +2,9 @@ package integration
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +18,8 @@ import (
 // capability, enough to drive save backup export and import.
 type saveStubMachine struct {
 	aramcore.Machine
-	data []byte
+	data      []byte
+	importErr error
 }
 
 func (m *saveStubMachine) ExportSaveData() ([]byte, error) {
@@ -23,8 +27,20 @@ func (m *saveStubMachine) ExportSaveData() ([]byte, error) {
 }
 
 func (m *saveStubMachine) ImportSaveData(data []byte) error {
+	if m.importErr != nil {
+		return m.importErr
+	}
 	m.data = append([]byte(nil), data...)
 	return nil
+}
+
+func (m *saveStubMachine) State() aramcore.State {
+	return aramcore.StatePaused
+}
+
+func (m *saveStubMachine) SaveState(output io.Writer) error {
+	_, err := output.Write([]byte("stub state"))
+	return err
 }
 
 const (
@@ -108,6 +124,85 @@ func TestBackendSaveExportImportRoundTrip(t *testing.T) {
 	}
 	if string(written) != "hero level 42" {
 		t.Fatalf("save file = %q, want %q", written, "hero level 42")
+	}
+}
+
+func TestFlushSaveDataPersistsRunningMachine(t *testing.T) {
+	backend := newSaveBackend(t, saveHashA, &saveStubMachine{data: []byte("saved before background")})
+
+	if err := backend.FlushSaveData(); err != nil {
+		t.Fatalf("flush save data: %v", err)
+	}
+
+	path := filepath.Join(backend.stateRoot, saveHashA, "savedata.bin")
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read flushed save data: %v", err)
+	}
+	if string(written) != "saved before background" {
+		t.Fatalf("flushed save data = %q", written)
+	}
+}
+
+func TestFlushSaveDataReplacesAnExistingSave(t *testing.T) {
+	machine := &saveStubMachine{data: []byte("first save")}
+	backend := newSaveBackend(t, saveHashA, machine)
+	if err := backend.FlushSaveData(); err != nil {
+		t.Fatalf("first flush: %v", err)
+	}
+	machine.data = []byte("newer save")
+	if err := backend.FlushSaveData(); err != nil {
+		t.Fatalf("replacement flush: %v", err)
+	}
+
+	path := filepath.Join(backend.stateRoot, saveHashA, "savedata.bin")
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(written) != "newer save" {
+		t.Fatalf("replacement save data = %q", written)
+	}
+}
+
+func TestRestoreSaveDataReportsImportFailure(t *testing.T) {
+	machine := &saveStubMachine{importErr: errors.New("corrupt game save")}
+	backend := newSaveBackend(t, saveHashA, machine)
+	path := filepath.Join(backend.stateRoot, saveHashA, "savedata.bin")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := backend.restoreSaveData(machine, saveHashA)
+	if err == nil || !strings.Contains(err.Error(), "corrupt game save") {
+		t.Fatalf("restore error = %v", err)
+	}
+}
+
+func TestSaveStateAlsoFlushesGameStorage(t *testing.T) {
+	machine := &saveStubMachine{data: []byte("forced game save")}
+	backend := newSaveBackend(t, saveHashA, machine)
+	backend.input.ProfileID = "synthetic"
+
+	err := backend.ExecuteCommand(context.Background(), frontend.CommandRequest{
+		Command: frontend.CommandSaveState,
+		Slot:    3,
+		Speed:   1,
+	})
+	if err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	path := filepath.Join(backend.stateRoot, saveHashA, "savedata.bin")
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read forced game save: %v", err)
+	}
+	if string(written) != "forced game save" {
+		t.Fatalf("forced game save = %q", written)
 	}
 }
 

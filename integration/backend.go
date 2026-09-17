@@ -182,6 +182,17 @@ func (backend *Backend) OpenWithProgress(
 		source.ProfileID = imageInfo.ProfileID
 		imageSHA256 = imageInfo.ImageSHA256
 		info.ImageSHA256 = imageSHA256
+	} else if provider, ok := machine.(interface {
+		CheatImageSHA256() string
+		CheatProfileID() string
+	}); ok {
+		// SKVM executes Java classes rather than a mapped ARM image. Its class
+		// digest is the equivalent stable executable identity and also keys the
+		// deterministic virtual class regions used by the cheat engine.
+		imageSHA256 = provider.CheatImageSHA256()
+		info.ImageSHA256 = imageSHA256
+		info.ProfileID = provider.CheatProfileID()
+		source.ProfileID = info.ProfileID
 	}
 	// Bytecode hosts expose their resolved source identity without inventing
 	// native image addresses or importing the application wrapper internally.
@@ -195,6 +206,16 @@ func (backend *Backend) OpenWithProgress(
 	// Wrapping happens before the machine is published so every later command
 	// goes through the wrapper that serializes cheats with guest execution.
 	machine, library, cheatUnavailable := attachCheats(machine)
+	// Restore before publishing the replacement machine. If the save is
+	// unreadable, leave the currently loaded title intact and report the cause
+	// instead of silently starting the new title with empty progress.
+	if err := backend.restoreSaveData(machine, info.SHA256); err != nil {
+		_ = machine.Close()
+		if sourceFile != nil {
+			_ = sourceFile.Close()
+		}
+		return info, backendError(frontend.FailureUnknown, err)
+	}
 
 	backend.mu.Lock()
 	oldMachine := backend.machine
@@ -223,11 +244,6 @@ func (backend *Backend) OpenWithProgress(
 	if oldFile != nil {
 		_ = oldFile.Close()
 	}
-
-	// Load the title's persisted writable storage before the shell starts the
-	// machine, so a Clet's first-run save (for example 에픽크로니클PE's gopt.sav)
-	// survives the exit-and-relaunch its "restart required" notice demands.
-	backend.restoreSaveData(machine, info.SHA256)
 
 	// Catalog defaults must be in guest memory before Open returns, because
 	// the shell starts the machine immediately afterwards and a repair such
@@ -546,14 +562,14 @@ func (backend *Backend) ExecuteCommand(
 		backend.setRunRequested(false)
 		err = machine.Stop()
 		if err == nil {
-			backend.persistSaveData(machine, backend.currentInputHash())
+			err = backend.persistSaveData(machine, backend.currentInputHash())
 		}
 	case frontend.CommandReset:
 		backend.setRunRequested(false)
 		// Capture the current writable storage before the reset re-bootstraps
 		// the guest, so a save written this run is not lost on restart.
-		backend.persistSaveData(machine, backend.currentInputHash())
-		err = machine.Reset(ctx)
+		persistErr := backend.persistSaveData(machine, backend.currentInputHash())
+		err = errors.Join(persistErr, machine.Reset(ctx))
 	case frontend.CommandFrame:
 		err = machine.StepFrame(ctx)
 	case frontend.CommandSaveState:
@@ -601,7 +617,9 @@ func (backend *Backend) RunFrame(ctx context.Context) error {
 		backend.setRunRequested(false)
 		// The guest ended (for example a Clet called MC_knlExit); flush its
 		// writable storage so the next launch reloads the save.
-		backend.persistSaveData(machine, backend.currentInputHash())
+		if err := backend.persistSaveData(machine, backend.currentInputHash()); err != nil {
+			return backendError(frontend.FailureUnknown, err)
+		}
 	}
 	return nil
 }
@@ -954,7 +972,7 @@ func (backend *Backend) Close() error {
 	var errs []error
 	if machine != nil {
 		// Flush the title's writable storage so saves survive a close/reopen.
-		backend.persistSaveData(machine, closingHash)
+		errs = append(errs, backend.persistSaveData(machine, closingHash))
 		errs = append(errs, machine.Close())
 	}
 	if sourceFile != nil {
@@ -1044,7 +1062,7 @@ func (backend *Backend) saveState(slot int) error {
 		return err
 	}
 	committed = true
-	return nil
+	return backend.persistSaveData(machine, backend.currentInputHash())
 }
 
 func (backend *Backend) loadState(slot int) error {

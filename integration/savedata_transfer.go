@@ -122,6 +122,9 @@ func (backend *Backend) ExportSaveData() ([]byte, error) {
 	if len(payload) == 0 {
 		return nil, errors.New("the loaded title has not written any save data yet")
 	}
+	if err := backend.writeSaveData(backend.currentInputHash(), payload); err != nil {
+		return nil, err
+	}
 	return encodeSaveBackup(backend.currentInputHash(), payload)
 }
 
@@ -155,6 +158,5 @@ func (backend *Backend) ImportSaveData(data []byte) error {
 	if err := capability.ImportSaveData(payload); err != nil {
 		return err
 	}
-	backend.persistSaveData(machine, current)
-	return nil
+	return backend.persistSaveData(machine, current)
 }

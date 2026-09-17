@@ -39,9 +39,11 @@ import java.util.Locale;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,8 +56,11 @@ import io.github.mirusu400.aram.mobile.Mobile;
 public final class MainActivity extends Activity
         implements Host, AudioManager.OnAudioFocusChangeListener {
     private static final int REQUEST_DOCUMENT = 1001;
+    private static final int REQUEST_EXPORT_DOCUMENT = 1002;
     private static final long MAX_IMPORT_BYTES = 2L * 1024L * 1024L * 1024L;
     private static final String STATE_PENDING_DOCUMENT_KIND = "pending_document_kind";
+    private static final String STATE_PENDING_EXPORT_PATH = "pending_export_path";
+    private static final String STATE_PENDING_EXPORT_TITLE = "pending_export_title";
     // Document kinds the shared frontend asks for. They match
     // frontend.DocumentKind* on the Go side.
     private static final String DOCUMENT_KIND_INPUT = "input";
@@ -69,6 +74,8 @@ public final class MainActivity extends Activity
     private AudioManager audioManager;
     private AudioFocusRequest audioFocusRequest;
     private String pendingDocumentKind = DOCUMENT_KIND_INPUT;
+    private String pendingExportPath = "";
+    private String pendingExportTitle = "";
     private InputManager inputManager;
     private InputManager.InputDeviceListener controllerListener;
     private AdMobController adMobController;
@@ -84,6 +91,14 @@ public final class MainActivity extends Activity
             if (kind != null && !kind.isEmpty()) {
                 pendingDocumentKind = kind;
             }
+            pendingExportPath = savedInstanceState.getString(
+                    STATE_PENDING_EXPORT_PATH,
+                    ""
+            );
+            pendingExportTitle = savedInstanceState.getString(
+                    STATE_PENDING_EXPORT_TITLE,
+                    ""
+            );
         }
 
         // The Go runtime sees none of Android's locale configuration, so the
@@ -291,34 +306,35 @@ public final class MainActivity extends Activity
     }
 
     /**
-     * Offers one file below the app private storage to another app. Save
-     * backups are written into private storage, where no file manager can
-     * reach them, so the share sheet is how a backup leaves the handset and
-     * survives uninstalling ARAM.
+     * Exports one app-private artifact through Android's create-document UI.
+     * The user picks a normal Documents/Downloads/cloud destination, so save
+     * backups and debug bundles do not remain trapped below filesDir.
      */
     @Override
     public void shareFile(String path, String mimeType, String title) throws Exception {
         File file = new File(path).getCanonicalFile();
         if (!file.isFile()) {
-            throw new IOException("the file to share no longer exists");
+            throw new IOException("the file to export no longer exists");
         }
-        Uri uri = ShareProvider.uriFor(this, file);
+        // Reuse the provider's canonical root check even though SAF writes the
+        // bytes directly instead of granting another app our private URI.
+        ShareProvider.uriFor(this, file);
         String type = mimeType == null || mimeType.isEmpty()
                 ? "application/octet-stream"
                 : mimeType;
-        Intent send = new Intent(Intent.ACTION_SEND);
-        send.setType(type);
-        send.putExtra(Intent.EXTRA_STREAM, uri);
-        send.putExtra(Intent.EXTRA_TITLE, title);
-        send.putExtra(Intent.EXTRA_SUBJECT, title);
-        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Intent chooser = Intent.createChooser(send, title);
-        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        String name = title == null || title.isEmpty() ? file.getName() : title;
         runOnUiThread(() -> {
             if (isFinishing() || isDestroyed()) {
                 return;
             }
-            startActivity(chooser);
+            pendingExportPath = file.getAbsolutePath();
+            pendingExportTitle = name;
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType(type);
+            intent.putExtra(Intent.EXTRA_TITLE, name);
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(intent, REQUEST_EXPORT_DOCUMENT);
         });
     }
 
@@ -468,6 +484,16 @@ public final class MainActivity extends Activity
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_EXPORT_DOCUMENT) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                File source = new File(pendingExportPath);
+                String title = pendingExportTitle;
+                exportDocument(source, data.getData(), title);
+            }
+            pendingExportPath = "";
+            pendingExportTitle = "";
+            return;
+        }
         if (requestCode != REQUEST_DOCUMENT) {
             return;
         }
@@ -493,7 +519,51 @@ public final class MainActivity extends Activity
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         outState.putString(STATE_PENDING_DOCUMENT_KIND, pendingDocumentKind);
+        outState.putString(STATE_PENDING_EXPORT_PATH, pendingExportPath);
+        outState.putString(STATE_PENDING_EXPORT_TITLE, pendingExportTitle);
         super.onSaveInstanceState(outState);
+    }
+
+    private void exportDocument(File source, Uri destination, String title) {
+        importExecutor.execute(() -> {
+            try (
+                    BufferedInputStream input = new BufferedInputStream(
+                            new FileInputStream(source)
+                    );
+                    OutputStream raw = getContentResolver().openOutputStream(
+                            destination,
+                            "w"
+                    );
+                    BufferedOutputStream output = raw == null
+                            ? null
+                            : new BufferedOutputStream(raw)
+            ) {
+                if (output == null) {
+                    throw new IOException("the document provider returned no output");
+                }
+                byte[] buffer = new byte[64 * 1024];
+                for (int count; (count = input.read(buffer)) != -1; ) {
+                    output.write(buffer, 0, count);
+                }
+                output.flush();
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        getString(R.string.export_succeeded, title),
+                        Toast.LENGTH_SHORT
+                ).show());
+            } catch (IOException | RuntimeException error) {
+                String detail = error.getMessage();
+                if (detail == null || detail.isEmpty()) {
+                    detail = error.getClass().getSimpleName();
+                }
+                String finalDetail = detail;
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        getString(R.string.export_failed, finalDetail),
+                        Toast.LENGTH_LONG
+                ).show());
+            }
+        });
     }
 
     @Override
