@@ -35,6 +35,9 @@ type probeResult struct {
 	LastExecution     *executionResult      `json:"last_execution,omitempty"`
 	WIPI              *wipiResult           `json:"wipi,omitempty"`
 	EADS              *eadsResult           `json:"eads,omitempty"`
+	Java              *javaResult           `json:"java,omitempty"`
+	GVM               *gvmResult            `json:"gvm,omitempty"`
+	BREW              *brewResult           `json:"brew,omitempty"`
 	Haptics           *hapticsResult        `json:"haptics,omitempty"`
 	TotalInstructions uint64                `json:"total_instructions,omitempty"`
 	FirstFrameSlice   uint64                `json:"first_frame_slice,omitempty"`
@@ -47,6 +50,30 @@ type probeResult struct {
 	Detail            string                `json:"detail,omitempty"`
 	ElapsedMS         int64                 `json:"elapsed_ms"`
 	hapticsActive     bool
+}
+
+type javaResult struct {
+	Runtime           string `json:"runtime"`
+	MainClass         string `json:"main_class"`
+	Started           bool   `json:"started"`
+	HasDisplay        bool   `json:"has_display"`
+	Instructions      uint64 `json:"instructions"`
+	PresentCount      uint64 `json:"present_count"`
+	FramebufferSHA256 string `json:"framebuffer_sha256,omitempty"`
+	FrameValid        bool   `json:"frame_valid"`
+}
+
+type gvmResult struct {
+	Boundary              string `json:"boundary,omitempty"`
+	Interval              int16  `json:"interval,omitempty"`
+	Selector              uint16 `json:"selector,omitempty"`
+	PresentCount          uint64 `json:"present_count"`
+	FrameValid            bool   `json:"frame_valid"`
+	FramebufferSHA256     string `json:"framebuffer_sha256,omitempty"`
+	NonUniform            bool   `json:"non_uniform"`
+	InputDispatchCount    uint64 `json:"input_dispatch_count,omitempty"`
+	LastInputGuestCode    uint16 `json:"last_input_guest_code,omitempty"`
+	LastInputInstructions uint64 `json:"last_input_instructions,omitempty"`
 }
 
 type imageResult struct {
@@ -84,6 +111,11 @@ type wipiResult struct {
 	ObservedAPIs        int      `json:"observed_apis"`
 	ObservedAPINames    []string `json:"observed_api_names,omitempty"`
 	UnimplementedAPIs   []string `json:"unimplemented_apis,omitempty"`
+}
+
+type brewResult struct {
+	PresentCount uint64 `json:"present_count"`
+	FrameValid   bool   `json:"frame_valid"`
 }
 
 type hapticsResult struct {
@@ -266,19 +298,19 @@ func run() int {
 			result.Detail = err.Error()
 			break
 		}
-		if (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
-			(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) {
+		if hasPresentedGuestFrame(diagnostics) {
 			result.Status = "ok_frame"
 			result.Level = "boots"
 			result.FirstFrameSlice = slice + 1
 			break
 		}
 		if diagnostics.Execution != nil &&
-			diagnostics.Execution.Reason == "breakpoint" {
+			(diagnostics.Execution.Reason == "breakpoint" ||
+				diagnostics.Execution.Reason == "service-boundary") {
 			result.Status = "ok_service_boundary"
 			break
 		}
-		if diagnostics.Execution != nil &&
+		if diagnostics.Execution != nil && diagnostics.State != frontend.StateRunning &&
 			diagnostics.Execution.Reason == "exited" {
 			result.Status = "ok_exit"
 			break
@@ -335,6 +367,10 @@ func run() int {
 				break
 			}
 			result.InputEvents++
+			// Some deterministic backends complete an authenticated input callback
+			// synchronously inside QueueInput. Sample immediately so a following
+			// frame tick cannot overwrite and hide that guest-visible response.
+			_ = backend.VideoFrame()
 			if err = runProbeFrames(
 				ctx,
 				backend,
@@ -403,8 +439,21 @@ func run() int {
 	return 1
 }
 
+func hasPresentedGuestFrame(diagnostics integration.Diagnostics) bool {
+	return (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
+		(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) ||
+		(diagnostics.GVM != nil && diagnostics.GVM.PresentCount > 0 && diagnostics.GVM.FrameValid) ||
+		(diagnostics.BREW != nil && diagnostics.BREW.PresentCount > 0 &&
+			diagnostics.BREW.FrameValid)
+}
+
 func updatePostInteractionMilestone(result *probeResult) {
-	if result.LastExecution != nil && result.LastExecution.Reason == "exited" {
+	if result.Java != nil {
+		// Delivered host input and a framebuffer publication do not prove that
+		// Java guest input handlers changed the expected screen or game state.
+		return
+	}
+	if result.State != frontend.StateRunning && result.LastExecution != nil && result.LastExecution.Reason == "exited" {
 		result.Status = "ok_exit"
 		if result.InputEvents != 0 {
 			result.Level = "interactive"
@@ -505,6 +554,30 @@ func runProbeFrames(
 }
 
 func copyDiagnostics(result *probeResult, diagnostics integration.Diagnostics) {
+	if gvm := diagnostics.GVM; gvm != nil {
+		result.GVM = &gvmResult{
+			Boundary: gvm.Boundary, Interval: gvm.Interval, Selector: gvm.Selector,
+			PresentCount: gvm.PresentCount, FrameValid: gvm.FrameValid,
+			FramebufferSHA256: gvm.FramebufferSHA256, NonUniform: gvm.NonUniform,
+			InputDispatchCount:    gvm.InputDispatchCount,
+			LastInputGuestCode:    gvm.LastInputGuestCode,
+			LastInputInstructions: gvm.LastInputInstructions,
+		}
+	}
+	if java := diagnostics.Java; java != nil {
+		result.Java = &javaResult{
+			Runtime: java.Runtime, MainClass: java.MainClass,
+			Started: java.Started, Instructions: java.Instructions, HasDisplay: java.HasDisplay,
+			PresentCount: java.PresentCount, FramebufferSHA256: java.FramebufferSHA256,
+			FrameValid: java.FrameValid,
+		}
+	}
+	if diagnostics.BREW != nil {
+		result.BREW = &brewResult{
+			PresentCount: diagnostics.BREW.PresentCount,
+			FrameValid:   diagnostics.BREW.FrameValid,
+		}
+	}
 	if diagnostics.Image != nil {
 		result.Image = &imageResult{
 			Name:       diagnostics.Image.Name,

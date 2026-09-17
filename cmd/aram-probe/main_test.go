@@ -158,6 +158,32 @@ func TestCopyDiagnosticsPreservesObservedWIPIAPINames(t *testing.T) {
 	}
 }
 
+func TestBREWGuestPresentationIsAFrameMilestone(t *testing.T) {
+	diagnostics := integration.Diagnostics{
+		BREW: &integration.BREWDiagnostics{PresentCount: 2, FrameValid: true},
+	}
+	if !hasPresentedGuestFrame(diagnostics) {
+		t.Fatal("authenticated BREW guest presentation was not recognized")
+	}
+
+	result := probeResult{}
+	copyDiagnostics(&result, diagnostics)
+	if result.BREW == nil || result.BREW.PresentCount != 2 || !result.BREW.FrameValid {
+		t.Fatalf("copied BREW diagnostics = %+v", result.BREW)
+	}
+}
+
+func TestBREWHostFramebufferBaselineIsNotAFrameMilestone(t *testing.T) {
+	if hasPresentedGuestFrame(integration.Diagnostics{}) {
+		t.Fatal("generic host framebuffer baseline was recognized as a guest frame")
+	}
+	if hasPresentedGuestFrame(integration.Diagnostics{
+		BREW: &integration.BREWDiagnostics{PresentCount: 1},
+	}) {
+		t.Fatal("invalid BREW host framebuffer was recognized as a guest frame")
+	}
+}
+
 func TestObserveHapticsRecordsGuestOutput(t *testing.T) {
 	result := probeResult{}
 	observeHaptics(&result, frontend.HapticsState{})
@@ -292,5 +318,30 @@ func TestUpdatePostInteractionMilestoneRecognizesGuestExit(t *testing.T) {
 	updatePostInteractionMilestone(&result)
 	if result.Status != "ok_exit" || result.Level != "interactive" {
 		t.Fatalf("post-interaction exit = status %q, level %q", result.Status, result.Level)
+	}
+}
+
+func TestUpdatePostInteractionMilestoneKeepsRunningGVMInteractive(t *testing.T) {
+	result := probeResult{
+		Status: "ok_frame", Level: "boots", State: frontend.StateRunning,
+		InputEvents: 2, LastExecution: &executionResult{Reason: "exited"},
+	}
+	updatePostInteractionMilestone(&result)
+	if result.Status != "ok_frame" || result.Level != "interactive" {
+		t.Fatalf("running GVM interaction = status %q, level %q", result.Status, result.Level)
+	}
+}
+
+func TestCopyDiagnosticsIncludesGVMFrame(t *testing.T) {
+	result := probeResult{}
+	copyDiagnostics(&result, integration.Diagnostics{GVM: &integration.GVMDiagnostics{
+		Boundary: "timer-request", Interval: 100, Selector: 1,
+		PresentCount: 3, FrameValid: true, NonUniform: true,
+		InputDispatchCount: 1, LastInputGuestCode: 5, LastInputInstructions: 166,
+	}})
+	if result.GVM == nil || result.GVM.PresentCount != 3 || !result.GVM.FrameValid || !result.GVM.NonUniform ||
+		result.GVM.InputDispatchCount != 1 || result.GVM.LastInputGuestCode != 5 || result.GVM.LastInputInstructions != 166 ||
+		result.GVM.Boundary != "timer-request" {
+		t.Fatalf("GVM diagnostics = %+v", result.GVM)
 	}
 }
