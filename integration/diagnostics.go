@@ -53,8 +53,8 @@ type JavaDiagnostics struct {
 	FrameValid        bool
 }
 
-// BREWDiagnostics reports authenticated guest presentation activity. A host
-// framebuffer by itself is deliberately not evidence that the BREW guest drew.
+// BREWDiagnostics reports guest-owned presentation activity. A host framebuffer
+// by itself is deliberately not evidence that the BREW guest drew.
 type BREWDiagnostics struct {
 	PresentCount uint64
 	FrameValid   bool
@@ -257,8 +257,8 @@ func (backend *Backend) Diagnostics() Diagnostics {
 	if provider, ok := machine.(interface {
 		BREWFrameStats() (application.BREWFrameStats, bool)
 	}); ok {
-		// This authenticated, guest-owned counter is the sole source of BREW
-		// frame evidence. Never infer a guest presentation from the host buffer.
+		// This guest-owned counter is the sole source of BREW frame evidence.
+		// Never infer a guest presentation from the host buffer.
 		if stats, present := provider.BREWFrameStats(); present {
 			snapshot.BREW = &BREWDiagnostics{
 				PresentCount: stats.PresentCount,
