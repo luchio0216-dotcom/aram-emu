@@ -22,6 +22,7 @@ type Diagnostics struct {
 	EADS      *EADSDiagnostics
 	Java      *JavaDiagnostics
 	GVM       *GVMDiagnostics
+	BREW      *BREWDiagnostics
 }
 
 // GVMDiagnostics reports a service request observed by the bounded diagnostic
@@ -50,6 +51,13 @@ type JavaDiagnostics struct {
 	PresentCount      uint64
 	FramebufferSHA256 string
 	FrameValid        bool
+}
+
+// BREWDiagnostics reports authenticated guest presentation activity. A host
+// framebuffer by itself is deliberately not evidence that the BREW guest drew.
+type BREWDiagnostics struct {
+	PresentCount uint64
+	FrameValid   bool
 }
 
 type ImageDiagnostics struct {
@@ -243,6 +251,18 @@ func (backend *Backend) Diagnostics() Diagnostics {
 				ObservedAPIs:        coverage.Observed,
 				ObservedAPINames:    provider.WIPIObservedAPIs(),
 				UnimplementedAPIs:   provider.WIPIUnimplementedAPIs(),
+			}
+		}
+	}
+	if provider, ok := machine.(interface {
+		BREWFrameStats() (application.BREWFrameStats, bool)
+	}); ok {
+		// This authenticated, guest-owned counter is the sole source of BREW
+		// frame evidence. Never infer a guest presentation from the host buffer.
+		if stats, present := provider.BREWFrameStats(); present {
+			snapshot.BREW = &BREWDiagnostics{
+				PresentCount: stats.PresentCount,
+				FrameValid:   stats.FrameValid,
 			}
 		}
 	}

@@ -158,6 +158,32 @@ func TestCopyDiagnosticsPreservesObservedWIPIAPINames(t *testing.T) {
 	}
 }
 
+func TestBREWGuestPresentationIsAFrameMilestone(t *testing.T) {
+	diagnostics := integration.Diagnostics{
+		BREW: &integration.BREWDiagnostics{PresentCount: 2, FrameValid: true},
+	}
+	if !hasPresentedGuestFrame(diagnostics) {
+		t.Fatal("authenticated BREW guest presentation was not recognized")
+	}
+
+	result := probeResult{}
+	copyDiagnostics(&result, diagnostics)
+	if result.BREW == nil || result.BREW.PresentCount != 2 || !result.BREW.FrameValid {
+		t.Fatalf("copied BREW diagnostics = %+v", result.BREW)
+	}
+}
+
+func TestBREWHostFramebufferBaselineIsNotAFrameMilestone(t *testing.T) {
+	if hasPresentedGuestFrame(integration.Diagnostics{}) {
+		t.Fatal("generic host framebuffer baseline was recognized as a guest frame")
+	}
+	if hasPresentedGuestFrame(integration.Diagnostics{
+		BREW: &integration.BREWDiagnostics{PresentCount: 1},
+	}) {
+		t.Fatal("invalid BREW host framebuffer was recognized as a guest frame")
+	}
+}
+
 func TestObserveHapticsRecordsGuestOutput(t *testing.T) {
 	result := probeResult{}
 	observeHaptics(&result, frontend.HapticsState{})

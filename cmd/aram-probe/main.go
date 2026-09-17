@@ -37,6 +37,7 @@ type probeResult struct {
 	EADS              *eadsResult           `json:"eads,omitempty"`
 	Java              *javaResult           `json:"java,omitempty"`
 	GVM               *gvmResult            `json:"gvm,omitempty"`
+	BREW              *brewResult           `json:"brew,omitempty"`
 	Haptics           *hapticsResult        `json:"haptics,omitempty"`
 	TotalInstructions uint64                `json:"total_instructions,omitempty"`
 	FirstFrameSlice   uint64                `json:"first_frame_slice,omitempty"`
@@ -112,6 +113,11 @@ type wipiResult struct {
 	UnimplementedAPIs   []string `json:"unimplemented_apis,omitempty"`
 }
 
+type brewResult struct {
+	PresentCount uint64 `json:"present_count"`
+	FrameValid   bool   `json:"frame_valid"`
+}
+
 type hapticsResult struct {
 	Activations   uint64 `json:"activations"`
 	Samples       uint64 `json:"samples"`
@@ -131,8 +137,7 @@ func main() {
 }
 
 func run() int {
-	input := flag.String("input", "", "path to an authorized application input")
-	profile := flag.String("profile", "", "optional backend-owned compatibility profile ID")
+	input := flag.String("input", "", "path to an authorized WIPI input")
 	label := flag.String("label", "", "privacy-safe display name for the result")
 	slices := flag.Uint64("slices", 256, "maximum one-instruction execution slices")
 	postFrameSlices := flag.Uint64(
@@ -245,7 +250,9 @@ func run() int {
 			return 2
 		}
 	}
-	if err := backend.ConfigureAudio(probeAudioSettings(*audioMode == "mix")); err != nil {
+	if err := backend.ConfigureAudio(frontend.AudioSettings{
+		MixMode: *audioMode == "mix",
+	}); err != nil {
 		result.Detail = err.Error()
 		result.ElapsedMS = time.Since(started).Milliseconds()
 		writeResult(result)
@@ -258,7 +265,6 @@ func run() int {
 		frontend.OpenRequest{
 			Path:        *input,
 			DisplayName: result.Name,
-			ProfileID:   *profile,
 		},
 		func(stage frontend.OpenStage) {
 			stages = append(stages, stage)
@@ -292,15 +298,10 @@ func run() int {
 			result.Detail = err.Error()
 			break
 		}
-		if (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
-			(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) ||
-			(diagnostics.GVM != nil && diagnostics.GVM.PresentCount > 0 && diagnostics.GVM.FrameValid) {
+		if hasPresentedGuestFrame(diagnostics) {
 			result.Status = "ok_frame"
 			result.Level = "boots"
 			result.FirstFrameSlice = slice + 1
-			break
-		}
-		if observeJavaFrame(&result, slice+1) {
 			break
 		}
 		if diagnostics.Execution != nil &&
@@ -438,6 +439,14 @@ func run() int {
 	return 1
 }
 
+func hasPresentedGuestFrame(diagnostics integration.Diagnostics) bool {
+	return (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
+		(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) ||
+		(diagnostics.GVM != nil && diagnostics.GVM.PresentCount > 0 && diagnostics.GVM.FrameValid) ||
+		(diagnostics.BREW != nil && diagnostics.BREW.PresentCount > 0 &&
+			diagnostics.BREW.FrameValid)
+}
+
 func updatePostInteractionMilestone(result *probeResult) {
 	if result.Java != nil {
 		// Delivered host input and a framebuffer publication do not prove that
@@ -498,8 +507,6 @@ func runProbeSlice(
 	observeHaptics(result, backend.Haptics())
 	if diagnostics.EADS != nil {
 		result.TotalInstructions = diagnostics.EADS.TotalInstructions
-	} else if diagnostics.Java != nil {
-		result.TotalInstructions = diagnostics.Java.Instructions
 	} else if diagnostics.Execution != nil {
 		result.TotalInstructions += diagnostics.Execution.Instructions
 	}
@@ -565,6 +572,12 @@ func copyDiagnostics(result *probeResult, diagnostics integration.Diagnostics) {
 			FrameValid: java.FrameValid,
 		}
 	}
+	if diagnostics.BREW != nil {
+		result.BREW = &brewResult{
+			PresentCount: diagnostics.BREW.PresentCount,
+			FrameValid:   diagnostics.BREW.FrameValid,
+		}
+	}
 	if diagnostics.Image != nil {
 		result.Image = &imageResult{
 			Name:       diagnostics.Image.Name,
@@ -627,7 +640,7 @@ func classifyError(err error, format string) (string, string, frontend.FailureKi
 	if errors.As(err, &backendErr) {
 		switch backendErr.Kind {
 		case frontend.FailureUnsupportedProfile:
-			return "unsupported_format", recognizedLevel(format), backendErr.Kind
+			return "unsupported_format", "recognized", backendErr.Kind
 		case frontend.FailureMalformedInput:
 			return "malformed_input", recognizedLevel(format), backendErr.Kind
 		case frontend.FailureGuestFaulted:
