@@ -424,6 +424,20 @@ func (backend *Backend) Capability(command frontend.BackendCommand) frontend.Cap
 		return frontend.Capability{Reason: "No aram-core machine is loaded"}
 	}
 	state := backend.State()
+	backend.mu.RLock()
+	gvmDiagnostic := backend.input.ProfileID == application.GVMKernelProfileID
+	backend.mu.RUnlock()
+	if gvmDiagnostic {
+		if command == frontend.CommandStart && state != frontend.StateReady {
+			return frontend.Capability{Reason: "Reset the GVM diagnostic before starting another dispatch"}
+		}
+		switch command {
+		case frontend.CommandPauseResume, frontend.CommandFrame:
+			return frontend.Capability{Reason: "The GVM diagnostic profile cannot continue past a service boundary"}
+		case frontend.CommandLoadState, frontend.CommandSaveState:
+			return frontend.Capability{Reason: "The GVM diagnostic profile does not support save states"}
+		}
+	}
 	supported := false
 	switch command {
 	case frontend.CommandStart:

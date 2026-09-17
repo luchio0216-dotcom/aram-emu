@@ -274,7 +274,8 @@ func run() int {
 			break
 		}
 		if diagnostics.Execution != nil &&
-			diagnostics.Execution.Reason == "breakpoint" {
+			(diagnostics.Execution.Reason == "breakpoint" ||
+				diagnostics.Execution.Reason == "service-boundary") {
 			result.Status = "ok_service_boundary"
 			break
 		}

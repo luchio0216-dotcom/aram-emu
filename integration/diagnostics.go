@@ -16,6 +16,29 @@ type Diagnostics struct {
 	Execution *ExecutionDiagnostics
 	WIPI      *WIPIDiagnostics
 	EADS      *EADSDiagnostics
+	Java      *JavaDiagnostics
+	GVM       *GVMDiagnostics
+}
+
+// GVMDiagnostics reports a service request observed by the bounded diagnostic
+// profile. It does not claim that the service was delivered to the guest.
+type GVMDiagnostics struct {
+	Boundary string
+	Interval int16
+	Selector uint16
+}
+
+// JavaDiagnostics describes the shared Java engine without manufacturing ARM
+// register/entry information. A published frame is not proof of a booted title.
+type JavaDiagnostics struct {
+	Runtime           string
+	MainClass         string
+	Started           bool
+	HasDisplay        bool
+	Instructions      uint64
+	PresentCount      uint64
+	FramebufferSHA256 string
+	FrameValid        bool
 }
 
 type ImageDiagnostics struct {
@@ -84,6 +107,23 @@ func (backend *Backend) Diagnostics() Diagnostics {
 	// Reporting interfaces live on the core machine, not on the cheat wrapper
 	// the backend publishes, and every probe below is read-only.
 	machine = unwrapMachine(machine)
+	if provider, ok := machine.(coreDebugSnapshotter); ok &&
+		(input.Format == "j2me" || input.Format == "skvm") {
+		debug := provider.DebugSnapshot(1)
+		if debug.SKVM != nil {
+			java := debug.SKVM
+			snapshot.Java = &JavaDiagnostics{
+				Runtime: debug.Runtime, MainClass: java.MainClass,
+				Started: java.Started, Instructions: java.Instructions,
+				HasDisplay: java.CurrentDisplay != 0,
+			}
+			if frame := java.Framebuffer; frame != nil {
+				snapshot.Java.PresentCount = frame.Sequence
+				snapshot.Java.FramebufferSHA256 = frame.RGBASHA256
+				snapshot.Java.FrameValid = frame.SnapshotHashOK && frame.DescriptorValid
+			}
+		}
+	}
 	if provider, ok := machine.(interface {
 		ImageInfo() application.ImageInfo
 	}); ok {
@@ -117,6 +157,20 @@ func (backend *Backend) Diagnostics() Diagnostics {
 			execution.Error = result.Err.Error()
 		}
 		snapshot.Execution = execution
+	}
+	if provider, ok := machine.(interface {
+		GVMDiagnosticBoundary() (application.GVMDiagnosticBoundary, bool)
+	}); ok {
+		if boundary, present := provider.GVMDiagnosticBoundary(); present {
+			snapshot.GVM = &GVMDiagnostics{
+				Boundary: boundary.Kind,
+				Interval: boundary.Interval,
+				Selector: boundary.Selector,
+			}
+			if snapshot.Execution != nil {
+				snapshot.Execution.Reason = "service-boundary"
+			}
+		}
 	}
 	if provider, ok := machine.(interface {
 		WIPIFrameStats() (application.WIPIFrameStats, bool)
