@@ -151,11 +151,6 @@ func (backend *Backend) OpenWithProgress(
 	machine, err := backend.factoryForCreate().Create(ctx, source)
 	if err != nil {
 		_ = sourceFile.Close()
-		var unsupported *application.UnsupportedPlatformError
-		if errors.As(err, &unsupported) {
-			info.Format = string(unsupported.Kind)
-			info.ProfileID = unsupported.ProfileID
-		}
 		return info, backendError(classifyFactoryError(err, source.Format), err)
 	}
 	if machine == nil {
@@ -193,15 +188,6 @@ func (backend *Backend) OpenWithProgress(
 		info.ImageSHA256 = imageSHA256
 		info.ProfileID = provider.CheatProfileID()
 		source.ProfileID = info.ProfileID
-	}
-	// Bytecode hosts expose their resolved source identity without inventing
-	// native image addresses or importing the application wrapper internally.
-	if provider, ok := machine.(interface{ SourceInfo() aramcore.Source }); ok {
-		identity := provider.SourceInfo()
-		info.Format = identity.Format
-		info.ProfileID = identity.ProfileID
-		source.Format = identity.Format
-		source.ProfileID = identity.ProfileID
 	}
 	// Wrapping happens before the machine is published so every later command
 	// goes through the wrapper that serializes cheats with guest execution.
@@ -332,13 +318,12 @@ func inspectSource(
 		name = filepath.Base(report.Path)
 	}
 	source := aramcore.Source{
-		Name:      name,
-		Path:      report.Path,
-		ProfileID: request.ProfileID,
-		Format:    string(report.Kind),
-		SHA256:    report.SHA256,
-		ReaderAt:  sourceFile,
-		Size:      report.Size,
+		Name:     name,
+		Path:     report.Path,
+		Format:   string(report.Kind),
+		SHA256:   report.SHA256,
+		ReaderAt: sourceFile,
+		Size:     report.Size,
 	}
 	info := frontend.InputInfo{
 		DisplayName: name,
@@ -383,12 +368,11 @@ func inspectSourceBytes(
 			)
 	}
 	source := aramcore.Source{
-		Name:      name,
-		ProfileID: request.ProfileID,
-		Format:    string(report.Kind),
-		SHA256:    report.SHA256,
-		ReaderAt:  bytes.NewReader(request.Data),
-		Size:      report.Size,
+		Name:     name,
+		Format:   string(report.Kind),
+		SHA256:   report.SHA256,
+		ReaderAt: bytes.NewReader(request.Data),
+		Size:     report.Size,
 	}
 	info := frontend.InputInfo{
 		DisplayName: name,
@@ -530,12 +514,6 @@ func (backend *Backend) ExecuteCommand(
 	var err error
 	switch request.Command {
 	case frontend.CommandStart:
-		if machine.State() == aramcore.StatePaused {
-			// A frame yield leaves the core paused. Resume the adapter's run
-			// intent, as PauseResume does, without starting the guest again.
-			backend.setRunRequested(true)
-			break
-		}
 		if machine.State() == aramcore.StateStopped {
 			// The guest ended (for example a first-run Clet's MC_knlExit).
 			// Re-bootstrap it — preserving the title's writable storage — so
@@ -897,21 +875,14 @@ func (backend *Backend) ToolSnapshot(
 			)
 		}
 		lines := []string{
+			"CPU backend: portable interpreter",
 			"State: " + machine.State().String(),
 		}
-		if snapshot, ok := backend.CoreDebugSnapshot(1); ok && snapshot.SKVM != nil {
-			lines = append(lines,
-				"Runtime: "+snapshot.Runtime+" (Java bytecode)",
-				"Main class: "+snapshot.SKVM.MainClass,
-				fmt.Sprintf("Instructions: %d", snapshot.SKVM.Instructions),
-				"Bytecode stepping and breakpoints are not exposed by the backend contract.",
-			)
-		} else if provider, ok := unwrapMachine(machine).(interface {
+		if provider, ok := unwrapMachine(machine).(interface {
 			ImageInfo() application.ImageInfo
 		}); ok {
 			info := provider.ImageInfo()
 			lines = append(lines,
-				"CPU backend: "+emptyFallback(info.CPUBackend, "portable interpreter"),
 				"Image: "+info.Name,
 				fmt.Sprintf("Entry: 0x%08x (%s)", info.EntryPoint, modeName(info.Mode)),
 			)
