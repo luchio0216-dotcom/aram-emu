@@ -442,6 +442,8 @@ func run() int {
 func hasPresentedGuestFrame(diagnostics integration.Diagnostics) bool {
 	return (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
 		(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) ||
+		(diagnostics.Java != nil && diagnostics.Java.PresentCount > 0 &&
+			diagnostics.Java.FrameValid) ||
 		(diagnostics.GVM != nil && diagnostics.GVM.PresentCount > 0 && diagnostics.GVM.FrameValid) ||
 		(diagnostics.BREW != nil && diagnostics.BREW.PresentCount > 0 &&
 			diagnostics.BREW.FrameValid)
