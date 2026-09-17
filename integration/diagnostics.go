@@ -126,8 +126,7 @@ func (backend *Backend) Diagnostics() Diagnostics {
 	// Reporting interfaces live on the core machine, not on the cheat wrapper
 	// the backend publishes, and every probe below is read-only.
 	machine = unwrapMachine(machine)
-	if provider, ok := machine.(coreDebugSnapshotter); ok &&
-		(input.Format == "j2me" || input.Format == "skvm") {
+	if provider, ok := machine.(coreDebugSnapshotter); ok {
 		debug := provider.DebugSnapshot(1)
 		if debug.SKVM != nil {
 			java := debug.SKVM

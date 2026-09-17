@@ -173,6 +173,20 @@ func TestBREWGuestPresentationIsAFrameMilestone(t *testing.T) {
 	}
 }
 
+func TestJavaGuestPresentationIsAFrameMilestone(t *testing.T) {
+	diagnostics := integration.Diagnostics{
+		Java: &integration.JavaDiagnostics{PresentCount: 3, FrameValid: true},
+	}
+	if !hasPresentedGuestFrame(diagnostics) {
+		t.Fatal("validated Java guest presentation was not recognized")
+	}
+	if hasPresentedGuestFrame(integration.Diagnostics{
+		Java: &integration.JavaDiagnostics{PresentCount: 3},
+	}) {
+		t.Fatal("invalid Java framebuffer was recognized as a guest frame")
+	}
+}
+
 func TestBREWHostFramebufferBaselineIsNotAFrameMilestone(t *testing.T) {
 	if hasPresentedGuestFrame(integration.Diagnostics{}) {
 		t.Fatal("generic host framebuffer baseline was recognized as a guest frame")
