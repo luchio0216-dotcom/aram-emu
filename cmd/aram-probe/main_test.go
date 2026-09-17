@@ -294,3 +294,28 @@ func TestUpdatePostInteractionMilestoneRecognizesGuestExit(t *testing.T) {
 		t.Fatalf("post-interaction exit = status %q, level %q", result.Status, result.Level)
 	}
 }
+
+func TestUpdatePostInteractionMilestoneKeepsRunningGVMInteractive(t *testing.T) {
+	result := probeResult{
+		Status: "ok_frame", Level: "boots", State: frontend.StateRunning,
+		InputEvents: 2, LastExecution: &executionResult{Reason: "exited"},
+	}
+	updatePostInteractionMilestone(&result)
+	if result.Status != "ok_frame" || result.Level != "interactive" {
+		t.Fatalf("running GVM interaction = status %q, level %q", result.Status, result.Level)
+	}
+}
+
+func TestCopyDiagnosticsIncludesGVMFrame(t *testing.T) {
+	result := probeResult{}
+	copyDiagnostics(&result, integration.Diagnostics{GVM: &integration.GVMDiagnostics{
+		Boundary: "timer-request", Interval: 100, Selector: 1,
+		PresentCount: 3, FrameValid: true, NonUniform: true,
+		InputDispatchCount: 1, LastInputGuestCode: 5, LastInputInstructions: 166,
+	}})
+	if result.GVM == nil || result.GVM.PresentCount != 3 || !result.GVM.FrameValid || !result.GVM.NonUniform ||
+		result.GVM.InputDispatchCount != 1 || result.GVM.LastInputGuestCode != 5 || result.GVM.LastInputInstructions != 166 ||
+		result.GVM.Boundary != "timer-request" {
+		t.Fatalf("GVM diagnostics = %+v", result.GVM)
+	}
+}
