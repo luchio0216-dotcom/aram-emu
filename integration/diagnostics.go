@@ -17,6 +17,15 @@ type Diagnostics struct {
 	WIPI      *WIPIDiagnostics
 	EADS      *EADSDiagnostics
 	Java      *JavaDiagnostics
+	GVM       *GVMDiagnostics
+}
+
+// GVMDiagnostics reports a service request observed by the bounded diagnostic
+// profile. It does not claim that the service was delivered to the guest.
+type GVMDiagnostics struct {
+	Boundary string
+	Interval int16
+	Selector uint16
 }
 
 // JavaDiagnostics describes the shared Java engine without manufacturing ARM
@@ -148,6 +157,20 @@ func (backend *Backend) Diagnostics() Diagnostics {
 			execution.Error = result.Err.Error()
 		}
 		snapshot.Execution = execution
+	}
+	if provider, ok := machine.(interface {
+		GVMDiagnosticBoundary() (application.GVMDiagnosticBoundary, bool)
+	}); ok {
+		if boundary, present := provider.GVMDiagnosticBoundary(); present {
+			snapshot.GVM = &GVMDiagnostics{
+				Boundary: boundary.Kind,
+				Interval: boundary.Interval,
+				Selector: boundary.Selector,
+			}
+			if snapshot.Execution != nil {
+				snapshot.Execution.Reason = "service-boundary"
+			}
+		}
 	}
 	if provider, ok := machine.(interface {
 		WIPIFrameStats() (application.WIPIFrameStats, bool)

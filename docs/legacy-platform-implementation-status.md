@@ -25,12 +25,16 @@ P0–P7 programme or any entire commercial platform is complete.
   MOD members. MIF/MOD basenames are not assumed to pair. Signature presence is
   metadata only, not signature verification or protection removal.
 - `aram-core/loader/gnex` recognizes bounded standalone SGS headers in addition
-  to paired packages. Its undecoded body is not sent to the Java or ARM VM.
+  to paired packages. Its body is never sent to the Java or ARM VM. The explicit
+  `gvm-kernel-v1/skt/diagnostic` profile instead runs only the independently
+  modeled bounded GVM initial dispatch and stops at unresolved service boundaries.
 - `application.UnsupportedPlatformError` preserves validated BREW/GVM kind and
   recognition identity through the ordinary integration path. The profiles
   `brew-container-v1/unknown/generic` and `gvm-container-v1/skt/generic` version
   the recognition schema, not a guest SDK, ABI or executable save-state format.
-  No runnable machine or save-state capability is supplied for these inputs.
+  The default remains non-runnable. The explicit GVM diagnostic profile supplies
+  a Machine lifecycle and execution diagnostics, but no rendering, input, timer
+  delivery, audio or save-state capability.
 - Product and frontend retain normal open/control workflows. Missing platform
   capabilities remain unavailable rather than being replaced by a title launcher.
 
@@ -90,8 +94,8 @@ absolute path or raw dump committed.
 | P3 | Native-policy separation and synthetic lifecycle/state coverage | Multiple real API clusters, Korean rendering, timing, audio and RMS semantics |
 | P4 | BREW container/MIF envelope recognition only | Verified MOD load/entry/relocation and object/event ABI, then bootstrap tests |
 | P5 | Not implemented | Resource/service adapters and real screen/input/storage evidence |
-| P6 | Existing SGS header evidence hardened | Verified version-specific opcode, stack, control-flow and resource semantics |
-| P7 | Not implemented | Evidence-based VM, service/state integration and real input milestones |
+| P6 | SGS header plus explicit bounded initial-dispatch diagnostic Machine | Broader version-specific opcode, stack, control-flow and resource semantics |
+| P7 | Product lifecycle terminates at an explicit unresolved `timer-request` service boundary, with no video/input/state/continue capabilities advertised | Timer delivery, rendering, input, audio, save state and real gameplay milestones |
 
 External `.db`/`.idx` import is not treated as empty successful storage. Unknown
 BREW protection, missing modules, malformed data and undecoded GVM execution

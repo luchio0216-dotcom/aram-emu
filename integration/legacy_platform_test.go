@@ -49,6 +49,72 @@ func TestLegacyRecognitionErrorsPreserveInputIdentity(t *testing.T) {
 	}
 }
 
+func TestExplicitGVMDiagnosticProfileReachesServiceBoundary(t *testing.T) {
+	const entry, ds, ps, dm = 54, 128, 132, 136
+	sgs := make([]byte, dm)
+	sgs[0], sgs[2], sgs[5], sgs[10] = 2, 12, 1, 'G'
+	for offset, value := range map[int]uint16{
+		0x1c: entry,
+		0x2c: ds,
+		0x2e: ps,
+		0x30: dm,
+		0x32: dm,
+	} {
+		binary.LittleEndian.PutUint16(sgs[offset:], value)
+	}
+	copy(sgs[entry:], []byte{0x06, 0, 10, 0x06, 0x12, 0x34, 0x9a, 0xff})
+	copy(sgs[ds:], []byte{1, 2, 1, 0})
+	copy(sgs[ps:], []byte{1, 2, 3, 4})
+
+	backend := NewBackend(nil)
+	t.Cleanup(func() { _ = backend.Close() })
+	info, err := backend.Open(context.Background(), frontend.OpenRequest{
+		DisplayName: "diagnostic.sgs",
+		Data:        sgs,
+		ProfileID:   application.GVMKernelProfileID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Format != "gnex-sgs" || info.ProfileID != application.GVMKernelProfileID ||
+		backend.State() != frontend.StateReady {
+		t.Fatalf("open identity=%+v state=%s", info, backend.State())
+	}
+	if err := backend.Execute(context.Background(), frontend.CommandStart); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := backend.Diagnostics()
+	if diagnostics.Execution == nil || diagnostics.Execution.Reason != "service-boundary" ||
+		diagnostics.Execution.Instructions != 2 || diagnostics.Execution.PC != 61 ||
+		diagnostics.Execution.Error != "" || backend.State() != frontend.StateStopped {
+		t.Fatalf("diagnostics=%+v state=%s", diagnostics.Execution, backend.State())
+	}
+	if diagnostics.GVM == nil || diagnostics.GVM.Boundary != "timer-request" ||
+		diagnostics.GVM.Interval != 10 || diagnostics.GVM.Selector != 0x1234 {
+		t.Fatalf("GVM diagnostics=%+v", diagnostics.GVM)
+	}
+	if frame := backend.VideoFrame(); frame.Image != nil || frame.Sequence != 0 {
+		t.Fatalf("diagnostic profile manufactured a video frame: %+v", frame)
+	}
+	for _, command := range []frontend.BackendCommand{
+		frontend.CommandStart,
+		frontend.CommandPauseResume,
+		frontend.CommandFrame,
+		frontend.CommandLoadState,
+		frontend.CommandSaveState,
+	} {
+		if capability := backend.Capability(command); capability.Supported || capability.Reason == "" {
+			t.Fatalf("%s capability=%+v", command, capability)
+		}
+	}
+	if capability := backend.Capability(frontend.CommandReset); !capability.Supported {
+		t.Fatalf("reset capability=%+v", capability)
+	}
+	if err := backend.QueueInput(frontend.InputEvent{Control: "ok", Pressed: true}); !errors.Is(err, application.ErrGVMInputUnavailable) {
+		t.Fatalf("input boundary: %v", err)
+	}
+}
+
 func TestJ2MESaveStateRejectsAnotherResolvedProfile(t *testing.T) {
 	ctx := context.Background()
 	backend := NewBackend(nil)
