@@ -77,6 +77,9 @@ func New(config Config) *Core {
 	factory := config.Factory
 	if factory == nil {
 		applicationFactory := application.NewFactory()
+		// The libretro product explicitly opts into the bounded portable BREW
+		// interpreter. aram-core library users remain opted out by default.
+		applicationFactory.AllowUntrustedBREW = true
 		applicationFactory.FrameRunBudget = application.DefaultHandsetRunBudget
 		applicationFactory.KTFRunBudget = application.DefaultKTFHandsetRunBudget
 		applicationFactory.OutputSampleRate = defaultSampleRate
