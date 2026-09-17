@@ -71,6 +71,10 @@ type Backend struct {
 func NewBackend(factory aramcore.Factory) *Backend {
 	if factory == nil {
 		defaultFactory := application.NewFactory()
+		// aram-emu is the explicit sandboxing boundary for portable BREW modules.
+		// Carrier .sig members are structurally required but not cryptographically
+		// verified by aram-core, so library consumers remain opted out by default.
+		defaultFactory.AllowUntrustedBREW = true
 		defaultFactory.FrameRunBudget = application.DefaultHandsetRunBudget
 		defaultFactory.KTFRunBudget = application.DefaultKTFHandsetRunBudget
 		// Emulate a successful LGT carrier DRM/auth handshake. There is no live
