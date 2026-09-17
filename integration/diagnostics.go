@@ -1,6 +1,10 @@
 package integration
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"image/color"
+
 	"github.com/mirusu400/aram-core/application"
 	"github.com/mirusu400/aram-core/cpu"
 	"github.com/mirusu400/aram-frontend/frontend"
@@ -23,9 +27,16 @@ type Diagnostics struct {
 // GVMDiagnostics reports a service request observed by the bounded diagnostic
 // profile. It does not claim that the service was delivered to the guest.
 type GVMDiagnostics struct {
-	Boundary string
-	Interval int16
-	Selector uint16
+	Boundary              string
+	Interval              int16
+	Selector              uint16
+	PresentCount          uint64
+	FrameValid            bool
+	FramebufferSHA256     string
+	NonUniform            bool
+	InputDispatchCount    uint64
+	LastInputGuestCode    uint16
+	LastInputInstructions uint64
 }
 
 // JavaDiagnostics describes the shared Java engine without manufacturing ARM
@@ -167,10 +178,48 @@ func (backend *Backend) Diagnostics() Diagnostics {
 				Interval: boundary.Interval,
 				Selector: boundary.Selector,
 			}
-			if snapshot.Execution != nil {
+			if snapshot.Execution != nil && snapshot.State == frontend.StateStopped {
 				snapshot.Execution.Reason = "service-boundary"
 			}
 		}
+	}
+	if provider, ok := machine.(application.GVMPresentDiagnostics); ok {
+		if snapshot.GVM == nil {
+			snapshot.GVM = &GVMDiagnostics{}
+		}
+		snapshot.GVM.PresentCount = provider.GVMPresentCount()
+		if frame := machine.Framebuffer(); frame != nil {
+			bounds := frame.Bounds()
+			snapshot.GVM.FrameValid = bounds.Dx() > 0 && bounds.Dy() > 0
+			if snapshot.GVM.FrameValid {
+				hash := sha256.New()
+				var first color.RGBA
+				firstSet := false
+				for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+					for x := bounds.Min.X; x < bounds.Max.X; x++ {
+						pixel := color.RGBAModel.Convert(frame.At(x, y)).(color.RGBA)
+						_, _ = hash.Write([]byte{pixel.R, pixel.G, pixel.B, pixel.A})
+						if !firstSet {
+							first, firstSet = pixel, true
+						} else if pixel != first {
+							snapshot.GVM.NonUniform = true
+						}
+					}
+				}
+				snapshot.GVM.FramebufferSHA256 = hex.EncodeToString(hash.Sum(nil))
+			}
+		}
+	}
+	if provider, ok := machine.(interface {
+		GVMInputDispatchDiagnostics() application.GVMInputDispatchDiagnostics
+	}); ok {
+		if snapshot.GVM == nil {
+			snapshot.GVM = &GVMDiagnostics{}
+		}
+		input := provider.GVMInputDispatchDiagnostics()
+		snapshot.GVM.InputDispatchCount = input.DispatchCount
+		snapshot.GVM.LastInputGuestCode = input.GuestCode
+		snapshot.GVM.LastInputInstructions = input.Result.Instructions
 	}
 	if provider, ok := machine.(interface {
 		WIPIFrameStats() (application.WIPIFrameStats, bool)
