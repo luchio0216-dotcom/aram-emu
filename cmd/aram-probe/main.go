@@ -37,6 +37,7 @@ type probeResult struct {
 	EADS              *eadsResult           `json:"eads,omitempty"`
 	Java              *javaResult           `json:"java,omitempty"`
 	GVM               *gvmResult            `json:"gvm,omitempty"`
+	BREW              *brewResult           `json:"brew,omitempty"`
 	Haptics           *hapticsResult        `json:"haptics,omitempty"`
 	TotalInstructions uint64                `json:"total_instructions,omitempty"`
 	FirstFrameSlice   uint64                `json:"first_frame_slice,omitempty"`
@@ -110,6 +111,11 @@ type wipiResult struct {
 	ObservedAPIs        int      `json:"observed_apis"`
 	ObservedAPINames    []string `json:"observed_api_names,omitempty"`
 	UnimplementedAPIs   []string `json:"unimplemented_apis,omitempty"`
+}
+
+type brewResult struct {
+	PresentCount uint64 `json:"present_count"`
+	FrameValid   bool   `json:"frame_valid"`
 }
 
 type hapticsResult struct {
@@ -292,9 +298,7 @@ func run() int {
 			result.Detail = err.Error()
 			break
 		}
-		if (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
-			(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) ||
-			(diagnostics.GVM != nil && diagnostics.GVM.PresentCount > 0 && diagnostics.GVM.FrameValid) {
+		if hasPresentedGuestFrame(diagnostics) {
 			result.Status = "ok_frame"
 			result.Level = "boots"
 			result.FirstFrameSlice = slice + 1
@@ -435,6 +439,14 @@ func run() int {
 	return 1
 }
 
+func hasPresentedGuestFrame(diagnostics integration.Diagnostics) bool {
+	return (diagnostics.EADS != nil && diagnostics.EADS.PresentCount > 0) ||
+		(diagnostics.WIPI != nil && diagnostics.WIPI.PresentCount > 0) ||
+		(diagnostics.GVM != nil && diagnostics.GVM.PresentCount > 0 && diagnostics.GVM.FrameValid) ||
+		(diagnostics.BREW != nil && diagnostics.BREW.PresentCount > 0 &&
+			diagnostics.BREW.FrameValid)
+}
+
 func updatePostInteractionMilestone(result *probeResult) {
 	if result.Java != nil {
 		// Delivered host input and a framebuffer publication do not prove that
@@ -558,6 +570,12 @@ func copyDiagnostics(result *probeResult, diagnostics integration.Diagnostics) {
 			Started: java.Started, Instructions: java.Instructions, HasDisplay: java.HasDisplay,
 			PresentCount: java.PresentCount, FramebufferSHA256: java.FramebufferSHA256,
 			FrameValid: java.FrameValid,
+		}
+	}
+	if diagnostics.BREW != nil {
+		result.BREW = &brewResult{
+			PresentCount: diagnostics.BREW.PresentCount,
+			FrameValid:   diagnostics.BREW.FrameValid,
 		}
 	}
 	if diagnostics.Image != nil {
