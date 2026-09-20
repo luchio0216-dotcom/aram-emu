@@ -1,10 +1,7 @@
 package integration
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	aramcore "github.com/mirusu400/aram-core/core"
 )
@@ -37,29 +34,6 @@ func saveDataFrom(machine aramcore.Machine) (saveDataMachine, bool) {
 	return capability, ok
 }
 
-// saveDataFileFor returns the per-title save-data path, keyed by input SHA-256
-// so each title keeps its own flash image alongside its state slots.
-func (backend *Backend) saveDataFileFor(hash string) (string, error) {
-	if hash == "" {
-		return "", errors.New("loaded input has no SHA-256 identity")
-	}
-	backend.mu.RLock()
-	root := backend.stateRoot
-	backend.mu.RUnlock()
-	if root == "" {
-		configRoot, err := os.UserConfigDir()
-		if err != nil {
-			return "", err
-		}
-		root = filepath.Join(configRoot, "ARAM", "states")
-	}
-	directory := filepath.Join(root, hash)
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return "", err
-	}
-	return filepath.Join(directory, "savedata.bin"), nil
-}
-
 // restoreSaveData loads a title's persisted writable storage into a freshly
 // opened machine before it starts, so the guest's first read observes its
 // saves. A missing file (first launch) is not an error.
@@ -68,16 +42,9 @@ func (backend *Backend) restoreSaveData(machine aramcore.Machine, hash string) e
 	if !ok {
 		return nil
 	}
-	path, err := backend.saveDataFileFor(hash)
+	data, err := backend.readSaveData(hash)
 	if err != nil {
-		return fmt.Errorf("resolve game save path: %w", err)
-	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read game save data: %w", err)
+		return err
 	}
 	if err := capability.ImportSaveData(data); err != nil {
 		return fmt.Errorf("import game save data: %w", err)
@@ -103,37 +70,7 @@ func (backend *Backend) writeSaveData(hash string, data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
-	path, err := backend.saveDataFileFor(hash)
-	if err != nil {
-		return fmt.Errorf("resolve game save path: %w", err)
-	}
-	temporary := path + ".tmp"
-	file, err := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("create temporary game save: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = file.Close()
-			_ = os.Remove(temporary)
-		}
-	}()
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("write temporary game save: %w", err)
-	}
-	if err := file.Sync(); err != nil {
-		return fmt.Errorf("sync temporary game save: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close temporary game save: %w", err)
-	}
-	if err := replaceFileCrashSafely(temporary, path); err != nil {
-		_ = os.Remove(temporary)
-		return fmt.Errorf("replace game save: %w", err)
-	}
-	committed = true
-	return nil
+	return backend.writeSaveDataBlob(hash, data)
 }
 
 // FlushSaveData snapshots the loaded title's writable storage without stopping
