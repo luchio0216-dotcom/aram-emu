@@ -76,6 +76,7 @@ func NewBackend(factory aramcore.Factory) *Backend {
 		// verified by aram-core, so library consumers remain opted out by default.
 		defaultFactory.AllowUntrustedBREW = true
 		defaultFactory.FrameRunBudget = application.DefaultHandsetRunBudget
+		defaultFactory.RaptorFrameRunBudget = application.DefaultRaptorFrameRunBudget
 		defaultFactory.KTFRunBudget = application.DefaultKTFHandsetRunBudget
 		// Emulate a successful LGT carrier DRM/auth handshake. There is no live
 		// carrier behind the emulator, so titles that gate startup on it (the

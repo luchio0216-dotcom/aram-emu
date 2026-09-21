@@ -19,4 +19,7 @@ func TestDefaultBackendUsesNativeHandsetFrameBudget(t *testing.T) {
 			application.DefaultHandsetRunBudget,
 		)
 	}
+	if factory.RaptorFrameRunBudget != application.DefaultRaptorFrameRunBudget {
+		t.Fatalf("Raptor frame budget = %d, want %d", factory.RaptorFrameRunBudget, application.DefaultRaptorFrameRunBudget)
+	}
 }
