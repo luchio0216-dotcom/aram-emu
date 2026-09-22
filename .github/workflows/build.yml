@@ -484,7 +484,11 @@ jobs:
           echo "::endgroup::"
           grep -F "package: name='${ARAM_APP_PKG}'" \
             android/app/build/apk-badging.txt
-          grep -F "versionCode='${GITHUB_RUN_NUMBER}' versionName='${ARAM_VERSION_NAME}'" \
+          expected_version_name="${ARAM_VERSION_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" != "release" ]]; then
+            expected_version_name="${expected_version_name}-nightly"
+          fi
+          grep -F "versionCode='${GITHUB_RUN_NUMBER}' versionName='${expected_version_name}'" \
             android/app/build/apk-badging.txt
           grep -F "application-label:'${ARAM_APP_LABEL}'" \
             android/app/build/apk-badging.txt
