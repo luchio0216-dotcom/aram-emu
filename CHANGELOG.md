@@ -4,6 +4,38 @@
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르며,
 버전은 [유의적 버전](https://semver.org/lang/ko/)을 사용합니다.
 
+## [0.4.0] - 출시 준비
+
+Android에서 게임 저장 데이터를 더 안정적으로 보존하고, 백업·진단 파일을
+사용자가 선택한 위치에 내보낼 수 있게 했습니다. SKT·LGT 게임의 실행 범위를
+넓히고 모바일 조작 화면도 다듬었습니다.
+
+### 주요 변경
+- Android 앱이 백그라운드로 전환될 때 실행 중인 게임의 저장 데이터를 기록
+- 저장 데이터 백업과 디버그 파일을 Android 문서 선택기로 내보내기
+- 모바일 메뉴에서 주요 화면과 설정으로 이동하기 쉽게 개선
+- 일부 SKT GVM 및 LGT WIPI/Java 게임의 화면·입력·미디어 처리 개선
+- 브라우저 버전에서 게임 저장 데이터를 브라우저 저장소에 보존
+- 일부 LGT Raptor 게임의 화면 좌표, 오디오, Java 배열 처리와 실행 안정성 개선
+
+BREW·GVM 지원은 게임별로 검증 단계가 다릅니다. 특정 게임의 실행 결과를
+전체 형식의 호환성으로 확대해 해석하지 마세요.
+
+### 포함 구성요소
+- core `936e0c0`
+- frontend `3291fea`
+- authd `4053607`
+- ebiten fork `4701562`
+
+## [0.3.0] - 2026-09-14
+
+- WIPI Java·SKVM/MIDP의 화면, 미디어, 저장소와 애플리케이션 생명주기 지원 확대
+- Android arm64·x86_64용 libretro 코어 추가
+- 검증된 HTTPS 게임 링크를 통한 앱 실행 지원
+- 모바일 터치 조작, 진동과 화면·오디오 설정 개선
+- Google Play 빌드에 동의 관리가 적용된 광고 배너 추가
+- 소스 라이선스를 PolyForm Noncommercial 1.0.0으로 변경
+
 ## [0.2.1] - 2026-09-04
 
 피처폰 특유의 게임 선택 화면을 재현한 홈 화면과, 게임에서 뽑아낸 실제 아이콘을
@@ -115,5 +147,8 @@
 
 - 최초 공개 릴리스
 
+[0.4.0]: https://github.com/mirusu400/aram-emu/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/mirusu400/aram-emu/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/mirusu400/aram-emu/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mirusu400/aram-emu/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mirusu400/aram-emu/releases/tag/v0.1.0

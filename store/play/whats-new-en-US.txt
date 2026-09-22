@@ -1,0 +1,1 @@
+Game saves are now flushed when the Android app goes into the background. Export save backups and diagnostic files to a location you choose. Mobile navigation is easier, and display, input, and audio compatibility improved for selected SKT and LGT games.

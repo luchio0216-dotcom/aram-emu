@@ -86,6 +86,12 @@ contains banner advertising:
   `ARAM_ADMOB_BANNER_AD_UNIT_ID`. The release workflow fails before building
   the AAB if either is absent.
 
+For a published `vX.Y.Z` GitHub release, CI sets the Android APK and Play AAB
+`versionName` to `X.Y.Z`. The `versionCode` is the build workflow's increasing
+run number; verify it exceeds the highest code already uploaded in Play Console
+before publishing a new release. The Play AAB is attached to the GitHub release
+after the release workflow succeeds, for manual upload to Play Console.
+
 The Play host refreshes consent using Google's User Messaging Platform (UMP)
 on every launch, displays a configured consent form when required, and shows a
 Privacy options button whenever UMP requires a persistent entry point. In the
