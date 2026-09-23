@@ -4,7 +4,15 @@
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르며,
 버전은 [유의적 버전](https://semver.org/lang/ko/)을 사용합니다.
 
-## [0.4.0] - 출시 준비
+## [0.4.1] - 2026-09-23
+
+### Android
+- Android Gradle Plugin 9.0.1과 Gradle 9.1.0으로 빌드 도구 업데이트
+- Stable 및 Google Play 릴리즈 빌드에 R8 코드 축소·최적화·난독화 적용
+- 사용하지 않는 Android 리소스를 릴리즈에서 제거하도록 개선
+- Play 릴리즈 후보 AAB에서 R8 매핑, 제거 보고서와 실제 난독화를 자동 검증
+
+## [0.4.0] - 2026-09-22
 
 Android에서 게임 저장 데이터를 더 안정적으로 보존하고, 백업·진단 파일을
 사용자가 선택한 위치에 내보낼 수 있게 했습니다. SKT·LGT 게임의 실행 범위를
@@ -147,6 +155,7 @@ BREW·GVM 지원은 게임별로 검증 단계가 다릅니다. 특정 게임의
 
 - 최초 공개 릴리스
 
+[0.4.1]: https://github.com/mirusu400/aram-emu/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mirusu400/aram-emu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mirusu400/aram-emu/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/mirusu400/aram-emu/compare/v0.2.0...v0.2.1
