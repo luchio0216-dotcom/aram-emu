@@ -32,7 +32,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  # A signed Play candidate must finish even if component automation pushes a
+  # new main revision while it is running. Ordinary builds still supersede one
+  # another, while candidates use their own concurrency lane.
+  group: build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.play_release_candidate && 'play-rc' || 'standard' }}
   cancel-in-progress: true
 
 jobs:
