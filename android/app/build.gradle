@@ -82,7 +82,12 @@ android {
             buildConfigField "String", "ADMOB_BANNER_AD_UNIT_ID", "\"${adMobTestBannerAdUnitId}\""
         }
         release {
-            minifyEnabled false
+            // R8 removes unused DEX code, optimizes the remaining bytecode, and
+            // obfuscates names. Resource shrinking uses the same reachability
+            // graph through AGP 9's optimized resource shrinking pipeline.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             // No signingConfig here - each flavor below sets its own release
             // signing key. (buildType-level signingConfig would win over the
             // flavor's for every flavor, which is not what we want here.)

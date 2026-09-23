@@ -19,7 +19,7 @@ is not the standalone frontend preview: the AAR statically includes the pinned
 ## Local build (Nightly and Stable)
 
 Prerequisites are Go, `ebitenmobile`, JDK 17, Android SDK 36, Android NDK
-28.2.13676358 or newer, and Gradle 8.14.1. NDK r28+ is required so the Go JNI
+28.2.13676358 or newer, and Gradle 9.1.0. NDK r28+ is required so the Go JNI
 library is compatible with Android devices using 16 KB memory pages.
 
 ```powershell
@@ -97,6 +97,14 @@ on every launch, displays a configured consent form when required, and shows a
 Privacy options button whenever UMP requires a persistent entry point. In the
 AdMob console, create and publish the required Privacy & messaging messages
 for the Play app before release.
+
+Release variants use AGP 9 and R8 full-mode optimization with resource
+shrinking. The ebitenmobile AAR supplies consumer rules for its JNI bindings;
+the app does not add broad keep rules that would defeat DEX shrinking or
+obfuscation. CI requires non-empty R8 mapping and removed-code reports and at
+least one renamed class before accepting a Play AAB. A manual `build` workflow
+run with `play_release_candidate` enabled exercises the signed Play release
+path without creating a public GitHub release.
 
 Frontend settings and working artifact files use the app-private
 `files/config` directory. The Activity initializes the Go runtime context and

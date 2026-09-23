@@ -19,6 +19,11 @@ on:
       ebiten_ref:
         description: ebiten fork override for the RG DS build (blank uses product-components.json)
         required: false
+      play_release_candidate:
+        description: Build a signed, optimized Play AAB without publishing a release
+        required: false
+        type: boolean
+        default: false
   release:
     types:
       - published
@@ -345,7 +350,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.14.1"
+          gradle-version: "9.1.0"
           cache-provider: basic
 
       - name: Install 16 KB-compatible Android NDK
@@ -494,14 +499,12 @@ jobs:
             android/app/build/apk-badging.txt
           grep -F "launchable-activity: name='io.github.mirusu400.aram.app.MainActivity'" \
             android/app/build/apk-badging.txt
-          grep -F "icon='res/mipmap-anydpi-v26/ic_aram.xml'" \
-            android/app/build/apk-badging.txt
-          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            unzip -Z1 "${apk}" | grep -Fx \
-              "res/mipmap-${density}-v4/ic_aram.png"
-            unzip -Z1 "${apk}" | grep -Fx \
-              "res/drawable-${density}-v4/ic_aram_foreground.png"
-          done
+          # R8/resource shrinking can shorten resource paths. Resolve the icon
+          # path from package metadata instead of requiring its source name.
+          icon_path="$(sed -n "s/^application:.* icon='\([^']*\)'.*/\1/p" \
+            android/app/build/apk-badging.txt | head -n 1)"
+          test -n "${icon_path}"
+          unzip -Z1 "${apk}" | grep -Fx "${icon_path}"
           keytool -printcert -jarfile "${apk}" \
             > android/app/build/apk-signing.txt
           grep -F "Owner: ${ARAM_CERT_CN}" \
@@ -521,7 +524,9 @@ jobs:
           retention-days: 14
 
       - name: Decode Play upload keystore
-        if: github.event_name == 'release'
+        if: >-
+          github.event_name == 'release' ||
+          (github.event_name == 'workflow_dispatch' && inputs.play_release_candidate)
         working-directory: aram-emu
         shell: bash
         run: |
@@ -529,7 +534,9 @@ jobs:
           test -s android/play.keystore
 
       - name: Build Google Play AAB
-        if: github.event_name == 'release'
+        if: >-
+          github.event_name == 'release' ||
+          (github.event_name == 'workflow_dispatch' && inputs.play_release_candidate)
         working-directory: aram-emu
         shell: bash
         env:
@@ -563,11 +570,30 @@ jobs:
             :app:lintPlayDebug :app:bundlePlayRelease
           aab="android/app/build/outputs/bundle/playRelease/app-play-release.aab"
           test -f "${aab}"
+          mapping="android/app/build/outputs/mapping/playRelease/mapping.txt"
+          usage="android/app/build/outputs/mapping/playRelease/usage.txt"
+          test -s "${mapping}"
+          test -s "${usage}"
+          renamed_classes="$(awk '
+            / -> .*:$/ {
+              before=$0
+              sub(/ -> .*/, "", before)
+              after=$0
+              sub(/.* -> /, "", after)
+              sub(/:$/, "", after)
+              if (before != after) renamed++
+            }
+            END { print renamed + 0 }
+          ' "${mapping}")"
+          test "${renamed_classes}" -gt 0
+          echo "R8 renamed ${renamed_classes} classes; removed code is recorded in ${usage}."
           mkdir -p dist
           cp "${aab}" dist/aram-google-play.aab
 
       - name: Upload Google Play AAB
-        if: github.event_name == 'release'
+        if: >-
+          github.event_name == 'release' ||
+          (github.event_name == 'workflow_dispatch' && inputs.play_release_candidate)
         uses: actions/upload-artifact@v7
         with:
           name: aram-google-play
