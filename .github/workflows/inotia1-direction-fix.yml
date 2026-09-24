@@ -1,0 +1,223 @@
+name: Inotia1 direction fix
+
+on:
+  push:
+    branches:
+      - fix/inotia1-key-release
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inotia1-direction-fix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORE_REF: eb891499fb89a592e55efb2cf0b97d0c3e89bb7f
+  FRONTEND_REF: 3291fea9de5fe79e085de97d031690899e2f7e06
+  AUTHD_REF: 4053607356dd89e621740388f7ec761e27ecee58
+
+jobs:
+  linux:
+    name: Linux validation build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Check out core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ env.FRONTEND_REF }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ env.AUTHD_REF }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aram-emu/go.mod
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev \
+            libxinerama-dev libxrandr-dev libxxf86vm-dev \
+            libasound2-dev pkg-config xvfb
+
+      - name: Apply Inotia1 input compatibility fix
+        working-directory: aram-emu
+        run: |
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          gofmt -w integration/backend.go
+          grep -n "inotia1RegularDirectionEdges" integration/backend.go
+
+      - name: Test product
+        working-directory: aram-emu
+        run: xvfb-run -a go test ./...
+
+      - name: Build Linux validation binary
+        working-directory: aram-emu
+        run: |
+          mkdir -p dist/package
+          go build -trimpath -o dist/package/aram ./cmd/aram
+          go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
+          tar -C dist/package -czf dist/aram-inotia1-fixed-linux-amd64.tar.gz .
+
+      - name: Upload Linux validation build
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia1-fixed-linux-amd64
+          path: aram-emu/dist/aram-inotia1-fixed-linux-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Android fixed APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Check out core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ env.FRONTEND_REF }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ env.AUTHD_REF }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Apply Inotia1 input compatibility fix
+        working-directory: aram-emu
+        run: |
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          gofmt -w integration/backend.go
+          grep -n "inotia1RegularDirectionEdges" integration/backend.go
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.1.0"
+          cache-provider: basic
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          sdkmanager="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          test -x "${sdkmanager}"
+          "${sdkmanager}" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/28.2.13676358" >> "${GITHUB_ENV}"
+
+      - name: Build integrated Android AAR
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
+          go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
+          mkdir -p android/app/libs android/app/src/main/assets
+          build_version="Inotia1Fix-${GITHUB_SHA::7}"
+          ebitenmobile bind \
+            -target android/arm64,android/amd64 \
+            -androidapi 23 \
+            -trimpath \
+            -ldflags="-s -w -X=github.com/mirusu400/aram-frontend/frontend.BuildVersion=${build_version}" \
+            -javapkg io.github.mirusu400.aram \
+            -o android/app/libs/aram.aar \
+            ./mobile
+          {
+            echo "aram-emu=${GITHUB_SHA}"
+            echo "aram-core=${CORE_REF}"
+            echo "aram-frontend=${FRONTEND_REF}"
+            echo "inotia1-direction-fix=regular-clet-edges"
+          } > android/app/src/main/assets/BUILD-INFO.txt
+          echo "ARAM_VERSION_NAME=${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Build Android APK
+        working-directory: aram-emu
+        env:
+          ARAM_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          gradle --no-daemon --stacktrace -p android \
+            :app:lintGithubDebug :app:assembleGithubDebug
+          apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
+          test -s "${apk}"
+          mkdir -p dist
+          cp "${apk}" dist/aram-inotia1-fixed-android.apk
+
+      - name: Verify fixed APK payload
+        working-directory: aram-emu
+        run: |
+          apk=dist/aram-inotia1-fixed-android.apk
+          test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=regular-clet-edges"
+
+      - name: Upload fixed Android APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia1-fixed-android
+          path: aram-emu/dist/aram-inotia1-fixed-android.apk
+          if-no-files-found: error
+          retention-days: 14
