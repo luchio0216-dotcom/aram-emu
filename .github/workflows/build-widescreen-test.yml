@@ -1,0 +1,154 @@
+name: inotia widescreen performance test
+
+on:
+  push:
+    branches:
+      - "perf/inotia-widescreen-fps"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inotia-widescreen-perf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Patched Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Resolve pinned components
+        id: components
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          echo "core=$(jq -r '.core' product-components.json)" >> "${GITHUB_OUTPUT}"
+          echo "frontend=$(jq -r '.frontend' product-components.json)" >> "${GITHUB_OUTPUT}"
+          echo "authd=$(jq -r '.authd' product-components.json)" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ steps.components.outputs.core }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ steps.components.outputs.frontend }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ steps.components.outputs.authd }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Apply widescreen rendering patch
+        shell: bash
+        run: |
+          python3 aram-emu/ci/apply_widescreen_perf_patch.py aram-core
+          gofmt -w \
+            aram-core/runtime/graphics.go \
+            aram-core/runtime/graphics_bulk.go \
+            aram-core/runtime/widescreen_fastpath_test.go
+          git -C aram-core diff --check
+          git -C aram-core diff -- \
+            runtime/graphics.go \
+            runtime/graphics_bulk.go \
+            runtime/widescreen_fastpath_test.go
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Test patched core
+        working-directory: aram-core
+        shell: bash
+        run: |
+          go test ./runtime -count=1
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.1.0"
+          cache-provider: basic
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          sdkmanager="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          test -x "${sdkmanager}"
+          "${sdkmanager}" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/28.2.13676358" >> "${GITHUB_ENV}"
+
+      - name: Build patched Android AAR
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
+          go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
+          mkdir -p android/app/libs android/app/src/main/assets dist
+          build_version="WidescreenPerf-${GITHUB_SHA::7}"
+          ebitenmobile bind \
+            -target android/arm64,android/amd64 \
+            -androidapi 23 \
+            -trimpath \
+            -ldflags="-s -w -X=github.com/mirusu400/aram-frontend/frontend.BuildVersion=${build_version}" \
+            -javapkg io.github.mirusu400.aram \
+            -o android/app/libs/aram.aar \
+            ./mobile
+          {
+            echo "aram-emu=${GITHUB_SHA}"
+            echo "aram-core=${{ steps.components.outputs.core }} + local widescreen perf patch"
+            echo "aram-frontend=${{ steps.components.outputs.frontend }}"
+            echo "aram-authd=${{ steps.components.outputs.authd }}"
+          } > android/app/src/main/assets/BUILD-INFO.txt
+
+      - name: Build APK
+        working-directory: aram-emu
+        shell: bash
+        env:
+          ARAM_VERSION_CODE: ${{ github.run_number }}
+          ARAM_VERSION_NAME: widescreen-perf-${{ github.run_number }}
+        run: |
+          gradle --no-daemon --stacktrace -p android :app:assembleGithubDebug
+          apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
+          test -s "${apk}"
+          cp "${apk}" dist/aram-inotia-widescreen-perf.apk
+          sha256sum dist/aram-inotia-widescreen-perf.apk > dist/SHA256SUMS.txt
+
+      - name: Upload patched APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia-widescreen-perf
+          path: |
+            aram-emu/dist/aram-inotia-widescreen-perf.apk
+            aram-emu/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
