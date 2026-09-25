@@ -99,10 +99,11 @@ func shortSaveHash(hash string) string {
 	return hash[:8]
 }
 
-// ExportSaveData returns the loaded title's writable storage wrapped in a
-// portable backup container. It fails when no title is loaded, the title keeps
-// no persistent storage, or the title has not written a save yet - there is
-// nothing to back up in those cases rather than an empty file to restore.
+// ExportSaveData returns the loaded title's writable storage as a portable save
+// backup. When the storage can be represented without loss in the old WIPI
+// WFSAVEBK file-table format, ARAM emits that format so the resulting backup is
+// a real .wfs file. Titles that use record stores or shared storage keep ARAM's
+// native container rather than silently losing data.
 func (backend *Backend) ExportSaveData() ([]byte, error) {
 	backend.operationMu.Lock()
 	defer backend.operationMu.Unlock()
@@ -122,10 +123,16 @@ func (backend *Backend) ExportSaveData() ([]byte, error) {
 	if len(payload) == 0 {
 		return nil, errors.New("the loaded title has not written any save data yet")
 	}
-	if err := backend.writeSaveData(backend.currentInputHash(), payload); err != nil {
+	current := backend.currentInputHash()
+	if err := backend.writeSaveData(current, payload); err != nil {
 		return nil, err
 	}
-	return encodeSaveBackup(backend.currentInputHash(), payload)
+	if wfs, compatible, err := encodeLegacyWFSFromARAMSave(current, payload); err != nil {
+		return nil, err
+	} else if compatible {
+		return wfs, nil
+	}
+	return encodeSaveBackup(current, payload)
 }
 
 // ImportSaveData restores an ARAM backup or a compatible legacy WFS backup into
