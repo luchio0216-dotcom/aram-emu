@@ -128,10 +128,9 @@ func (backend *Backend) ExportSaveData() ([]byte, error) {
 	return encodeSaveBackup(backend.currentInputHash(), payload)
 }
 
-// ImportSaveData restores a backup container into the loaded title. It refuses a
-// backup that belongs to a different title, applies the storage to the running
-// machine, and writes it through to the title's local save file so the restore
-// survives the next launch.
+// ImportSaveData restores an ARAM backup or a compatible legacy WFS backup into
+// the loaded title. Legacy WFS files are merged into the title's live ARAM
+// storage so emulator-generated support files survive the conversion.
 func (backend *Backend) ImportSaveData(data []byte) error {
 	backend.operationMu.Lock()
 	defer backend.operationMu.Unlock()
@@ -144,11 +143,15 @@ func (backend *Backend) ImportSaveData(data []byte) error {
 	if !ok {
 		return errors.New("the loaded title has no writable storage to restore into")
 	}
+	current := backend.currentInputHash()
+	if isLegacyWFSSave(data) {
+		return backend.importLegacyWFSSave(machine, capability, current, data)
+	}
+
 	identity, payload, err := decodeSaveBackup(data)
 	if err != nil {
 		return err
 	}
-	current := backend.currentInputHash()
 	if !strings.EqualFold(identity, current) {
 		return fmt.Errorf(
 			"this save backup belongs to a different title (%s…), not the loaded one",
