@@ -1,4 +1,4 @@
-name: Inotia1 hold direction fix
+name: Inotia1 compatibility hotfix
 
 on:
   push:
@@ -72,14 +72,18 @@ jobs:
             libxinerama-dev libxrandr-dev libxxf86vm-dev \
             libasound2-dev pkg-config xvfb
 
-      - name: Apply Inotia1 held-direction compatibility fix
+      - name: Apply Inotia1 compatibility patches
         working-directory: aram-emu
         run: |
           python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
           gofmt -w \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
-            ../aram-core/application/internal/ktf/ktf_clet_input_test.go
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/picker.go
           grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
 
       - name: Test focused KTF input regression
         working-directory: aram-core
@@ -109,7 +113,7 @@ jobs:
           retention-days: 14
 
   android:
-    name: Android hold-fix APK
+    name: Android compatibility APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out product
@@ -142,14 +146,18 @@ jobs:
           path: aram-authd
           persist-credentials: false
 
-      - name: Apply Inotia1 held-direction compatibility fix
+      - name: Apply Inotia1 compatibility patches
         working-directory: aram-emu
         run: |
           python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
           gofmt -w \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
-            ../aram-core/application/internal/ktf/ktf_clet_input_test.go
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/picker.go
           grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -196,7 +204,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia1HoldFix-${GITHUB_SHA::7}"
+          build_version="Inotia1WFS-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -210,6 +218,7 @@ jobs:
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
+            echo "save-backup=wfs-when-lossless"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
           echo "ARAM_VERSION_NAME=${GITHUB_SHA}" >> "${GITHUB_ENV}"
@@ -224,20 +233,20 @@ jobs:
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia1-holdfix-android.apk
+          cp "${apk}" dist/aram-inotia1-wfs-export-android.apk
 
-      - name: Verify hold-fix APK payload
+      - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia1-holdfix-android.apk
+          apk=dist/aram-inotia1-wfs-export-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
-          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
 
-      - name: Upload hold-fix Android APK
+      - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia1-holdfix-android
-          path: aram-emu/dist/aram-inotia1-holdfix-android.apk
+          name: aram-inotia1-wfs-export-android
+          path: aram-emu/dist/aram-inotia1-wfs-export-android.apk
           if-no-files-found: error
           retention-days: 14
