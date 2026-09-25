@@ -1,21 +1,21 @@
-name: inotia WFS widescreen performance APK
+name: inotia WFS WIPI-view APK
 
 on:
   push:
     branches:
-      - "perf/inotia-wfs-widescreen"
+      - "perf/inotia-wipi-view"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: inotia-wfs-widescreen-${{ github.ref }}
+  group: inotia-wipi-view-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
-    name: WFS + widescreen optimized Android APK
+    name: WFS + WIPI-view latest-frame Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out product
@@ -57,23 +57,31 @@ jobs:
           path: aram-authd
           persist-credentials: false
 
-      - name: Apply Inotia compatibility and performance patches
+      - name: Apply Inotia compatibility, WFS and WIPI-view patches
         working-directory: aram-emu
         shell: bash
         run: |
           python3 .github/scripts/apply_inotia1_direction_fix.py
           python3 .github/scripts/apply_wfs_backup_extension.py
           python3 ci/apply_widescreen_perf_patch.py ../aram-core
+          python3 ci/apply_wipi_view_pipeline_patch.py . ../aram-frontend
           gofmt -w \
+            integration/backend.go \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/runtime/graphics.go \
             ../aram-core/runtime/graphics_bulk.go \
             ../aram-core/runtime/widescreen_fastpath_test.go \
             ../aram-frontend/frontend/shell_savedata.go \
-            ../aram-frontend/frontend/picker.go
+            ../aram-frontend/frontend/picker.go \
+            ../aram-frontend/frontend/shell_settings_display.go \
+            ../aram-frontend/frontend/shell_media.go \
+            ../aram-frontend/frontend/render.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
           grep -n 'blitTransparentRGB565FastPath' ../aram-core/runtime/graphics_bulk.go
+          grep -n 'wipiViewHeight = 426' ../aram-frontend/frontend/shell_settings_display.go
+          grep -n 'latestVideo frontend.VideoFrame' integration/backend.go
+          git diff --check
           git -C ../aram-core diff --check
           git -C ../aram-frontend diff --check
 
@@ -88,15 +96,20 @@ jobs:
             aram-frontend/go.sum
             aram-authd/go.sum
 
-      - name: Test WFS compatibility
+      - name: Test product and WFS compatibility
         working-directory: aram-emu
         shell: bash
-        run: go test ./integration -run 'WFS|LegacyWFS' -count=1
+        run: go test ./integration -count=1
 
       - name: Test patched graphics core
         working-directory: aram-core
         shell: bash
         run: go test ./runtime -count=1
+
+      - name: Compile-test patched frontend
+        working-directory: aram-frontend
+        shell: bash
+        run: go test ./frontend -run '^$' -count=1
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -125,7 +138,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets dist
-          build_version="InotiaWFSWidePerf-${GITHUB_SHA::7}"
+          build_version="InotiaWFSWIPIView-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -137,11 +150,14 @@ jobs:
           {
             echo "aram-emu=${GITHUB_SHA}"
             echo "aram-core=${{ steps.components.outputs.core }} + widescreen perf patch"
-            echo "aram-frontend=${{ steps.components.outputs.frontend }} + WFS UI patch"
+            echo "aram-frontend=${{ steps.components.outputs.frontend }} + WFS + WIPI-view patch"
             echo "aram-authd=${{ steps.components.outputs.authd }}"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=wfs-compatible"
             echo "widescreen-perf=rgb565-transparent-span-copy+streaming-slow-blit"
+            echo "view=wipi-320x426"
+            echo "frame-pipeline=latest-frame-mailbox"
+            echo "display-path=nearest-single-pass"
           } > android/app/src/main/assets/BUILD-INFO.txt
 
       - name: Build APK
@@ -149,23 +165,24 @@ jobs:
         shell: bash
         env:
           ARAM_VERSION_CODE: ${{ github.run_number }}
-          ARAM_VERSION_NAME: inotia-wfs-wide-perf-${{ github.run_number }}
+          ARAM_VERSION_NAME: inotia-wfs-wipi-view-${{ github.run_number }}
         run: |
           gradle --no-daemon --stacktrace -p android :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
-          cp "${apk}" dist/aram-inotia-wfs-widescreen-perf.apk
-          unzip -p dist/aram-inotia-wfs-widescreen-perf.apk assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
-          unzip -p dist/aram-inotia-wfs-widescreen-perf.apk assets/BUILD-INFO.txt | grep -Fx "save-restore=wfs-compatible"
-          unzip -p dist/aram-inotia-wfs-widescreen-perf.apk assets/BUILD-INFO.txt | grep -Fx "widescreen-perf=rgb565-transparent-span-copy+streaming-slow-blit"
-          sha256sum dist/aram-inotia-wfs-widescreen-perf.apk > dist/SHA256SUMS.txt
+          cp "${apk}" dist/aram-inotia-wfs-wipi-view.apk
+          unzip -p dist/aram-inotia-wfs-wipi-view.apk assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
+          unzip -p dist/aram-inotia-wfs-wipi-view.apk assets/BUILD-INFO.txt | grep -Fx "save-restore=wfs-compatible"
+          unzip -p dist/aram-inotia-wfs-wipi-view.apk assets/BUILD-INFO.txt | grep -Fx "view=wipi-320x426"
+          unzip -p dist/aram-inotia-wfs-wipi-view.apk assets/BUILD-INFO.txt | grep -Fx "frame-pipeline=latest-frame-mailbox"
+          sha256sum dist/aram-inotia-wfs-wipi-view.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia-wfs-widescreen-perf
+          name: aram-inotia-wfs-wipi-view
           path: |
-            aram-emu/dist/aram-inotia-wfs-widescreen-perf.apk
+            aram-emu/dist/aram-inotia-wfs-wipi-view.apk
             aram-emu/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
