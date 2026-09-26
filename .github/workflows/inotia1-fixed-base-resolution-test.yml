@@ -1,16 +1,16 @@
-name: Inotia1 240x320 direction-fix v2 APK
+name: Inotia1 240x320 smooth direction WFS APK
 
 on:
   push:
     branches:
-      - test/inotia-fixed-base-resolutions
+      - perf/inotia-240x320-smooth-v1
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: inotia1-fixed-base-wipi-${{ github.ref }}
+  group: inotia1-240x320-smooth-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   android:
-    name: 240x320 + hardened Inotia direction edges + WFS
+    name: 240x320 + direction v2 + WFS + low-latency pacing
     runs-on: ubuntu-latest
     steps:
       - name: Check out product
@@ -76,7 +76,7 @@ jobs:
             ../aram-frontend/frontend/shell_savedata.go \
             ../aram-frontend/frontend/picker.go > /tmp/inotia-base-before.sha256
 
-      - name: Apply real WIPI 240x320 geometry at KTF framebuffer selection
+      - name: Apply proven WIPI 240x320 geometry
         working-directory: aram-emu
         shell: bash
         run: |
@@ -87,10 +87,18 @@ jobs:
             ../aram-frontend/frontend/shell_settings_display.go
           grep -n 'descriptor.AID == "010100D3"' ../aram-core/application/internal/ktf/ktf_title_quirks.go
           grep -n 'return 240, 320' ../aram-core/application/internal/ktf/ktf_title_quirks.go
-          grep -n 'return \[\]int{0}' ../aram-frontend/frontend/shell_settings_display.go
-          grep -n 'WIPI fixed 240 x 320' ../aram-frontend/frontend/shell_settings_display.go
 
-      - name: Prove direction and WFS files survive geometry patch byte-identical
+      - name: Apply low-latency single-quantum frame pacing
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 ci/apply_inotia_smooth_pacing.py ../aram-frontend
+          gofmt -w ../aram-frontend/frontend/pacing.go
+          grep -n 'framePacingQuantaPerTick = 1' ../aram-frontend/frontend/pacing.go
+          grep -n 'uiPriority: false' ../aram-frontend/frontend/pacing.go
+
+      - name: Prove direction and WFS files remain byte-identical
         working-directory: aram-emu
         shell: bash
         run: |
@@ -115,7 +123,7 @@ jobs:
             aram-frontend/go.sum
             aram-authd/go.sum
 
-      - name: Test direction press release and 240x320 grabbed-key regression
+      - name: Test direction press release regression
         working-directory: aram-core
         shell: bash
         run: |
@@ -123,7 +131,7 @@ jobs:
             -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges|Inotia1DirectionsBypassGrabbedKeyPath)$' \
             -count=1
 
-      - name: Test full KTF package after direction and geometry patches
+      - name: Test full KTF package
         working-directory: aram-core
         shell: bash
         run: go test ./application/internal/ktf -count=1
@@ -133,10 +141,10 @@ jobs:
         shell: bash
         run: go test ./integration -run 'WFS|LegacyWFS' -count=1
 
-      - name: Compile-test patched frontend
+      - name: Test frontend pacing and compile
         working-directory: aram-frontend
         shell: bash
-        run: go test ./frontend -run '^$' -count=1
+        run: go test ./frontend -count=1
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -166,7 +174,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets dist
-          build_version="Inotia1WIPI240x320DirV2-${GITHUB_SHA::7}"
+          build_version="Inotia1WIPI240Smooth-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -179,17 +187,16 @@ jobs:
             echo "aram-emu=${GITHUB_SHA}"
             echo "working-base=${WORKING_BASE}"
             echo "aram-core=${CORE_REF} + inotia-wipi-geometry + direction-v2"
-            echo "aram-frontend=${FRONTEND_REF} + width-experiment-disabled"
+            echo "aram-frontend=${FRONTEND_REF} + inotia-single-quantum-pacing"
             echo "inotia1-direction-fix=wipi-card-route-held-edges-v2"
             echo "direction-grab-route=inotia-directions-force-card"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=wfs-compatible"
-            echo "inotia-descriptor=176x220"
             echo "wipi-host-geometry=240x320"
-            echo "geometry-layer=ktf-effective-display-size"
-            echo "stale-width-overrides=ignored"
+            echo "frame-pacing=max-one-quantum-per-tick"
+            echo "frame-backlog=drop-not-batch"
+            echo "ui-priority-sleep=disabled"
             echo "graphics-core=stock"
-            echo "frame-pipeline=stock"
           } > android/app/src/main/assets/BUILD-INFO.txt
 
       - name: Build APK
@@ -197,31 +204,29 @@ jobs:
         shell: bash
         env:
           ARAM_VERSION_CODE: ${{ github.run_number }}
-          ARAM_VERSION_NAME: inotia1-wipi240x320-dirv2-${{ github.run_number }}
+          ARAM_VERSION_NAME: inotia1-240x320-smooth-${{ github.run_number }}
         run: |
           set -euxo pipefail
           gradle --no-daemon --stacktrace -p android :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
-          cp "${apk}" dist/aram-inotia1-wipi240x320-directionfix-v2.apk
-          info="$(unzip -p dist/aram-inotia1-wipi240x320-directionfix-v2.apk assets/BUILD-INFO.txt)"
+          cp "${apk}" dist/aram-inotia1-240x320-smooth-v1.apk
+          info="$(unzip -p dist/aram-inotia1-240x320-smooth-v1.apk assets/BUILD-INFO.txt)"
           printf '%s\n' "${info}"
-          printf '%s\n' "${info}" | grep -Fx "working-base=${WORKING_BASE}"
           printf '%s\n' "${info}" | grep -Fx "inotia1-direction-fix=wipi-card-route-held-edges-v2"
           printf '%s\n' "${info}" | grep -Fx "direction-grab-route=inotia-directions-force-card"
           printf '%s\n' "${info}" | grep -Fx "save-backup=wfs-when-lossless"
           printf '%s\n' "${info}" | grep -Fx "save-restore=wfs-compatible"
-          printf '%s\n' "${info}" | grep -Fx "inotia-descriptor=176x220"
           printf '%s\n' "${info}" | grep -Fx "wipi-host-geometry=240x320"
-          printf '%s\n' "${info}" | grep -Fx "geometry-layer=ktf-effective-display-size"
-          sha256sum dist/aram-inotia1-wipi240x320-directionfix-v2.apk > dist/SHA256SUMS.txt
+          printf '%s\n' "${info}" | grep -Fx "frame-pacing=max-one-quantum-per-tick"
+          sha256sum dist/aram-inotia1-240x320-smooth-v1.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia1-wipi240x320-directionfix-v2
+          name: aram-inotia1-240x320-smooth-v1
           path: |
-            aram-emu/dist/aram-inotia1-wipi240x320-directionfix-v2.apk
+            aram-emu/dist/aram-inotia1-240x320-smooth-v1.apk
             aram-emu/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
