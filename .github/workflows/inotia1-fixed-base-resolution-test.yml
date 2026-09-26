@@ -1,0 +1,220 @@
+name: Inotia1 fixed-base resolution test APK
+
+on:
+  push:
+    branches:
+      - test/inotia-fixed-base-resolutions
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inotia1-fixed-base-resolution-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Exact component pins from the user-confirmed working direction/WFS build.
+  CORE_REF: eb891499fb89a592e55efb2cf0b97d0c3e89bb7f
+  FRONTEND_REF: 3291fea9de5fe79e085de97d031690899e2f7e06
+  AUTHD_REF: 4053607356dd89e621740388f7ec761e27ecee58
+  WORKING_BASE: 71bbd37fd1e45d2d5e81c68ec99c79a0cb2f964c
+
+jobs:
+  android:
+    name: Direction fix + WFS immutable base + resolution choices
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Check out exact working core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out exact working frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ env.FRONTEND_REF }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out exact working authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ env.AUTHD_REF }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Apply permanent Inotia1 base first
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # These two patches are the permanent base. Resolution work is never
+          # allowed to replace or modify them.
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
+          gofmt -w \
+            ../aram-core/application/internal/ktf/ktf_scheduler.go \
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/picker.go
+
+          grep -n 'AID == "010100D3"' ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n 'TestKTFInotia1DirectionsUseRegularHeldEdges' ../aram-core/application/internal/ktf/ktf_clet_input_test.go
+          grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
+
+          # Snapshot the permanent base files. The resolution patch below must
+          # leave every byte of them unchanged.
+          sha256sum \
+            ../aram-core/application/internal/ktf/ktf_scheduler.go \
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/picker.go > /tmp/inotia-base-before.sha256
+
+      - name: Apply resolution choices only
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 ci/apply_inotia_resolution_choices.py ../aram-frontend
+          gofmt -w ../aram-frontend/frontend/shell_settings_display.go
+          grep -n 'return \[\]int{0, 260, 280, 300, 320}' ../aram-frontend/frontend/shell_settings_display.go
+          grep -n 'x 320 test' ../aram-frontend/frontend/shell_settings_display.go
+
+      - name: Prove permanent base was not touched by resolution patch
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sha256sum \
+            ../aram-core/application/internal/ktf/ktf_scheduler.go \
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/picker.go > /tmp/inotia-base-after.sha256
+          diff -u /tmp/inotia-base-before.sha256 /tmp/inotia-base-after.sha256
+          git -C ../aram-core diff --check
+          git -C ../aram-frontend diff --check
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Test direction press and release regression
+        working-directory: aram-core
+        shell: bash
+        run: |
+          go test ./application/internal/ktf \
+            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges)$' \
+            -count=1
+
+      - name: Test WFS backup and restore compatibility
+        working-directory: aram-emu
+        shell: bash
+        run: go test ./integration -run 'WFS|LegacyWFS' -count=1
+
+      - name: Compile-test patched frontend
+        working-directory: aram-frontend
+        shell: bash
+        run: go test ./frontend -run '^$' -count=1
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.1.0"
+          cache-provider: basic
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          sdkmanager="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          test -x "${sdkmanager}"
+          "${sdkmanager}" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/28.2.13676358" >> "${GITHUB_ENV}"
+
+      - name: Build integrated Android AAR
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
+          go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
+          mkdir -p android/app/libs android/app/src/main/assets dist
+          build_version="Inotia1FixedBaseResolution-${GITHUB_SHA::7}"
+          ebitenmobile bind \
+            -target android/arm64,android/amd64 \
+            -androidapi 23 \
+            -trimpath \
+            -ldflags="-s -w -X=github.com/mirusu400/aram-frontend/frontend.BuildVersion=${build_version}" \
+            -javapkg io.github.mirusu400.aram \
+            -o android/app/libs/aram.aar \
+            ./mobile
+          {
+            echo "aram-emu=${GITHUB_SHA}"
+            echo "working-base=${WORKING_BASE}"
+            echo "aram-core=${CORE_REF}"
+            echo "aram-frontend=${FRONTEND_REF}"
+            echo "inotia1-direction-fix=core-clet-held-edges"
+            echo "save-backup=wfs-when-lossless"
+            echo "save-restore=wfs-compatible"
+            echo "resolution-choices=native-240x320,260x320,280x320,300x320,320x320"
+            echo "graphics-core=stock"
+            echo "frame-pipeline=stock"
+          } > android/app/src/main/assets/BUILD-INFO.txt
+
+      - name: Build APK
+        working-directory: aram-emu
+        shell: bash
+        env:
+          ARAM_VERSION_CODE: ${{ github.run_number }}
+          ARAM_VERSION_NAME: inotia1-fixedbase-resolution-${{ github.run_number }}
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon --stacktrace -p android :app:assembleGithubDebug
+          apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
+          test -s "${apk}"
+          cp "${apk}" dist/aram-inotia1-fixedbase-resolution-test.apk
+
+          info="$(unzip -p dist/aram-inotia1-fixedbase-resolution-test.apk assets/BUILD-INFO.txt)"
+          printf '%s\n' "${info}"
+          printf '%s\n' "${info}" | grep -Fx "working-base=${WORKING_BASE}"
+          printf '%s\n' "${info}" | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
+          printf '%s\n' "${info}" | grep -Fx "save-backup=wfs-when-lossless"
+          printf '%s\n' "${info}" | grep -Fx "save-restore=wfs-compatible"
+          printf '%s\n' "${info}" | grep -Fx "resolution-choices=native-240x320,260x320,280x320,300x320,320x320"
+          printf '%s\n' "${info}" | grep -Fx "graphics-core=stock"
+          printf '%s\n' "${info}" | grep -Fx "frame-pipeline=stock"
+          sha256sum dist/aram-inotia1-fixedbase-resolution-test.apk > dist/SHA256SUMS.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia1-fixedbase-resolution-test
+          path: |
+            aram-emu/dist/aram-inotia1-fixedbase-resolution-test.apk
+            aram-emu/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
