@@ -1,4 +1,4 @@
-name: inotia WFS native WIPI-view APK
+name: inotia WFS WIPI portrait APK
 
 on:
   push:
@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: inotia-wipi-native-view-${{ github.ref }}
+  group: inotia-wipi-portrait-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
-    name: Inotia1 direction fix + WFS + native 240x320 WIPI view
+    name: Direction fix + WFS + WIPI 426x320 request
     runs-on: ubuntu-latest
     steps:
       - name: Check out product
@@ -57,19 +57,19 @@ jobs:
           path: aram-authd
           persist-credentials: false
 
-      - name: Apply permanent compatibility base and native WIPI presentation
+      - name: Apply permanent base and WIPI portrait patch
         working-directory: aram-emu
         shell: bash
         run: |
-          # Permanent Inotia1 compatibility base.
+          # Permanent base: never drop these two features.
           python3 .github/scripts/apply_inotia1_direction_fix.py
           python3 .github/scripts/apply_wfs_backup_extension.py
 
-          # Rendering-only performance optimization.
+          # Keep the renderer optimizations from the previous test series.
           python3 ci/apply_widescreen_perf_patch.py ../aram-core
 
-          # Native 240x320 WIPI-style presentation. This must keep normal ARAM
-          # chrome/menu visible; only the guest image uses Fit + nearest.
+          # WIPI-like portrait field of view. ARAM requests 426x320 because the
+          # KTF handset path presents the title with swapped axes.
           python3 ci/apply_wipi_native_view_patch.py ../aram-frontend
 
           gofmt -w \
@@ -83,19 +83,19 @@ jobs:
             ../aram-frontend/frontend/shell_settings_display.go \
             ../aram-frontend/frontend/render.go
 
-          # Fail the build if either permanent base feature disappears.
+          # Hard guards for the user's permanent compatibility base.
           grep -n 'AID == "010100D3"' ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'TestKTFInotia1DirectionsUseRegularHeldEdges' ../aram-core/application/internal/ktf/ktf_clet_input_test.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
-          grep -n 'WIPI view (native 240 x 320)' ../aram-frontend/frontend/shell_settings_display.go
+
+          # Guard the corrected WIPI geometry and visible settings chrome.
+          grep -n 'WIPI view (426 x 320)' ../aram-frontend/frontend/shell_settings_display.go
+          grep -n 'DisplaySettings{Width: 426, Height: nativeGuestHeight}' ../aram-frontend/frontend/shell_settings_display.go
           grep -n 'GuestWidthOverride == 320' ../aram-frontend/frontend/render.go
           grep -n 'Do not route through drawImmersiveWorkspace' ../aram-frontend/frontend/render.go
           grep -n 'blitTransparentRGB565FastPath' ../aram-core/runtime/graphics_bulk.go
-
-          # Regression guard: the WIPI preset must not alter shell.go chrome
-          # routing, otherwise the settings hamburger can disappear.
           if git -C ../aram-frontend diff --name-only | grep -qx 'frontend/shell.go'; then
-            echo 'ERROR: WIPI presentation modified shell.go and may hide chrome/menu'
+            echo 'ERROR: WIPI patch modified shell.go and may hide the settings menu'
             exit 1
           fi
 
@@ -113,7 +113,7 @@ jobs:
             aram-frontend/go.sum
             aram-authd/go.sum
 
-      - name: Test Inotia1 direction held/release regression
+      - name: Test direction release regression
         working-directory: aram-core
         shell: bash
         run: |
@@ -121,17 +121,17 @@ jobs:
             -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges)$' \
             -count=1
 
-      - name: Test patched graphics core
+      - name: Test graphics core
         working-directory: aram-core
         shell: bash
         run: go test ./runtime -count=1
 
-      - name: Test WFS product compatibility
+      - name: Test WFS compatibility
         working-directory: aram-emu
         shell: bash
         run: go test ./integration -run 'WFS|LegacyWFS' -count=1
 
-      - name: Test frontend touch release and compile
+      - name: Compile-test frontend
         working-directory: aram-frontend
         shell: bash
         run: |
@@ -165,7 +165,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets dist
-          build_version="Inotia1WFSNativeWIPIChrome-${GITHUB_SHA::7}"
+          build_version="Inotia1WFSWIPIPortrait-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -177,14 +177,14 @@ jobs:
           {
             echo "aram-emu=${GITHUB_SHA}"
             echo "aram-core=${{ steps.components.outputs.core }} + rgb565 perf patch"
-            echo "aram-frontend=${{ steps.components.outputs.frontend }} + WFS + native WIPI presentation"
+            echo "aram-frontend=${{ steps.components.outputs.frontend }} + WFS + WIPI portrait patch"
             echo "aram-authd=${{ steps.components.outputs.authd }}"
             echo "inotia1-direction-fix=core-clet-held-edges"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=wfs-compatible"
-            echo "guest-framebuffer=native-240x320"
-            echo "view=wipi-native-fit-chrome-visible"
-            echo "frame-pipeline=stock"
+            echo "display-request=426x320"
+            echo "target-view=portrait-320x426-class"
+            echo "settings-chrome=visible"
             echo "display-path=nearest-single-pass"
             echo "widescreen-perf=rgb565-transparent-span-copy+streaming-slow-blit"
           } > android/app/src/main/assets/BUILD-INFO.txt
@@ -194,27 +194,24 @@ jobs:
         shell: bash
         env:
           ARAM_VERSION_CODE: ${{ github.run_number }}
-          ARAM_VERSION_NAME: inotia1-wfs-native-wipi-chrome-${{ github.run_number }}
+          ARAM_VERSION_NAME: inotia1-wfs-wipi-426x320-${{ github.run_number }}
         run: |
           gradle --no-daemon --stacktrace -p android :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
-          cp "${apk}" dist/aram-inotia1-wfs-native-wipi-chrome.apk
-
-          unzip -p dist/aram-inotia1-wfs-native-wipi-chrome.apk assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
-          unzip -p dist/aram-inotia1-wfs-native-wipi-chrome.apk assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
-          unzip -p dist/aram-inotia1-wfs-native-wipi-chrome.apk assets/BUILD-INFO.txt | grep -Fx "save-restore=wfs-compatible"
-          unzip -p dist/aram-inotia1-wfs-native-wipi-chrome.apk assets/BUILD-INFO.txt | grep -Fx "guest-framebuffer=native-240x320"
-          unzip -p dist/aram-inotia1-wfs-native-wipi-chrome.apk assets/BUILD-INFO.txt | grep -Fx "view=wipi-native-fit-chrome-visible"
-          unzip -p dist/aram-inotia1-wfs-native-wipi-chrome.apk assets/BUILD-INFO.txt | grep -Fx "frame-pipeline=stock"
-          sha256sum dist/aram-inotia1-wfs-native-wipi-chrome.apk > dist/SHA256SUMS.txt
+          cp "${apk}" dist/aram-inotia1-wfs-wipi-426x320.apk
+          unzip -p dist/aram-inotia1-wfs-wipi-426x320.apk assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
+          unzip -p dist/aram-inotia1-wfs-wipi-426x320.apk assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
+          unzip -p dist/aram-inotia1-wfs-wipi-426x320.apk assets/BUILD-INFO.txt | grep -Fx "save-restore=wfs-compatible"
+          unzip -p dist/aram-inotia1-wfs-wipi-426x320.apk assets/BUILD-INFO.txt | grep -Fx "display-request=426x320"
+          sha256sum dist/aram-inotia1-wfs-wipi-426x320.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia1-wfs-native-wipi-chrome
+          name: aram-inotia1-wfs-wipi-426x320
           path: |
-            aram-emu/dist/aram-inotia1-wfs-native-wipi-chrome.apk
+            aram-emu/dist/aram-inotia1-wfs-wipi-426x320.apk
             aram-emu/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
