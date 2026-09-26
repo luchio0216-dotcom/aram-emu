@@ -1,16 +1,16 @@
-name: Inotia1 compatibility hotfix
+name: Inotia1+2 input and save compatibility
 
 on:
   push:
     branches:
-      - fix/inotia1-key-release
+      - fix/inotia12-input-save-restore
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: inotia1-direction-fix-${{ github.ref }}
+  group: inotia12-input-save-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -72,24 +72,28 @@ jobs:
             libxinerama-dev libxrandr-dev libxxf86vm-dev \
             libasound2-dev pkg-config xvfb
 
-      - name: Apply Inotia1 compatibility patches
+      - name: Apply Inotia compatibility patches
         working-directory: aram-emu
         run: |
           python3 .github/scripts/apply_inotia1_direction_fix.py
           python3 .github/scripts/apply_wfs_backup_extension.py
+          python3 .github/scripts/apply_save_restore_restart.py
           gofmt -w \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/shell_results.go \
             ../aram-frontend/frontend/picker.go
           grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
+          grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
 
-      - name: Test focused KTF input regression
+      - name: Test focused KTF input regressions
         working-directory: aram-core
         run: |
           go test ./application/internal/ktf \
-            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges)$' \
+            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges|Inotia2DirectionsAndOKUseRegularHeldEdges)$' \
             -count=1
 
       - name: Test product
@@ -102,13 +106,13 @@ jobs:
           mkdir -p dist/package
           go build -trimpath -o dist/package/aram ./cmd/aram
           go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
-          tar -C dist/package -czf dist/aram-inotia1-holdfix-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia12-input-save-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia1-holdfix-linux-amd64
-          path: aram-emu/dist/aram-inotia1-holdfix-linux-amd64.tar.gz
+          name: aram-inotia12-input-save-linux-amd64
+          path: aram-emu/dist/aram-inotia12-input-save-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -146,18 +150,22 @@ jobs:
           path: aram-authd
           persist-credentials: false
 
-      - name: Apply Inotia1 compatibility patches
+      - name: Apply Inotia compatibility patches
         working-directory: aram-emu
         run: |
           python3 .github/scripts/apply_inotia1_direction_fix.py
           python3 .github/scripts/apply_wfs_backup_extension.py
+          python3 .github/scripts/apply_save_restore_restart.py
           gofmt -w \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/shell_results.go \
             ../aram-frontend/frontend/picker.go
           grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
+          grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -170,11 +178,11 @@ jobs:
             aram-frontend/go.sum
             aram-authd/go.sum
 
-      - name: Test focused KTF input regression
+      - name: Test focused KTF input regressions
         working-directory: aram-core
         run: |
           go test ./application/internal/ktf \
-            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges)$' \
+            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges|Inotia2DirectionsAndOKUseRegularHeldEdges)$' \
             -count=1
 
       - name: Set up Java
@@ -204,7 +212,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia1WFS-${GITHUB_SHA::7}"
+          build_version="Inotia12Fix-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -218,7 +226,9 @@ jobs:
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
+            echo "inotia2-input-fix=direction-ok-held-edges"
             echo "save-backup=wfs-when-lossless"
+            echo "save-restore=restart-after-import"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
           echo "ARAM_VERSION_NAME=${GITHUB_SHA}" >> "${GITHUB_ENV}"
@@ -233,20 +243,22 @@ jobs:
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia1-wfs-export-android.apk
+          cp "${apk}" dist/aram-inotia12-input-save-fix-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia1-wfs-export-android.apk
+          apk=dist/aram-inotia12-input-save-fix-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=direction-ok-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia1-wfs-export-android
-          path: aram-emu/dist/aram-inotia1-wfs-export-android.apk
+          name: aram-inotia12-input-save-fix-android
+          path: aram-emu/dist/aram-inotia12-input-save-fix-android.apk
           if-no-files-found: error
           retention-days: 14
