@@ -1,56 +1,55 @@
 from pathlib import Path
 
-JLET = Path("../aram-core/application/internal/ktf/ktf_java_jlet.go")
+KERNEL = Path("../aram-core/application/internal/ktf/ktf_wipic_kernel.go")
 TESTS = Path("../aram-core/application/internal/ktf/ktf_clet_input_test.go")
 INOTIA2_AID = "010100D5"
 
-source = JLET.read_text()
-old = '''\tcase "getCurrentProgramID()I":
-\t\treturn 1, nil
+source = KERNEL.read_text()
+old = '''func (r *Runtime) systemPropertyValue(key string) (string, bool) {
+\tkey = strings.ToUpper(strings.TrimSpace(key))
+\tif value, ok := r.wipicSystemProperties[key]; ok {
 '''
-new = f'''\tcase "getCurrentProgramID()I":
-\t\t// W-Feature's KTF Java compatibility surface answers zero here. Inotia 2
-\t\t// includes this value in the handset identity used while validating its
-\t\t// persistent character data, so ARAM's generic value 1 makes a W-Feature
-\t\t// save appear as ERROR(00). Keep the compatibility strictly title-scoped;
-\t\t// every other KTF title retains ARAM's existing value.
-\t\tif r.Pkg.Descriptor.AID == "{INOTIA2_AID}" {{
-\t\t\treturn 0, nil
-\t\t}}
-\t\treturn 1, nil
+new = f'''func (r *Runtime) systemPropertyValue(key string) (string, bool) {{
+\tkey = strings.ToUpper(strings.TrimSpace(key))
+\t// Inotia 2 persists a handset identity beside save0.dat and rejects a slot
+\t// when that identity differs. W-Feature, whose .wfs files are the portable
+\t// reference for this title, reports PHONEMODEL=Emulator. Keep this override
+\t// strictly scoped to Inotia 2; every other KTF title retains ARAM's existing
+\t// generic KTF handset model.
+\tif r.Pkg.Descriptor.AID == "{INOTIA2_AID}" && key == "PHONEMODEL" {{
+\t\treturn "Emulator", true
+\t}}
+\tif value, ok := r.wipicSystemProperties[key]; ok {{
 '''
 if new not in source:
     if old not in source:
-        raise SystemExit("KTF Jlet getCurrentProgramID baseline did not match")
+        raise SystemExit("KTF systemPropertyValue baseline did not match")
     source = source.replace(old, new, 1)
-JLET.write_text(source)
+KERNEL.write_text(source)
 
 tests = TESTS.read_text()
-marker = "func TestKTFInotia2WFeatureProgramIDCompatibility"
+marker = "func TestKTFInotia2WFeaturePhoneModelCompatibility"
 if marker not in tests:
     tests += f'''
 
-// TestKTFInotia2WFeatureProgramIDCompatibility pins the W-Feature handset
-// identity that Inotia 2 persists alongside its character save. The exception
-// is deliberately AID-scoped so unrelated KTF titles keep the generic ID 1.
-func TestKTFInotia2WFeatureProgramIDCompatibility(t *testing.T) {{
+// TestKTFInotia2WFeaturePhoneModelCompatibility pins the title-scoped handset
+// model used by W-Feature while leaving ARAM's generic KTF model unchanged.
+func TestKTFInotia2WFeaturePhoneModelCompatibility(t *testing.T) {{
 \truntime := newTestRuntime(t)
 \truntime.Pkg.Descriptor.AID = "{INOTIA2_AID}"
-\tgot, err := runtime.handleJletMethod("getCurrentProgramID", "()I")
-\tcheck(t, err)
-\tif got != 0 {{
-\t\tt.Fatalf("Inotia2 getCurrentProgramID = %d, want W-Feature value 0", got)
+\tgot, ok := runtime.systemPropertyValue("PHONEMODEL")
+\tif !ok || got != "Emulator" {{
+\t\tt.Fatalf("Inotia2 PHONEMODEL = %q, %t; want W-Feature Emulator, true", got, ok)
 \t}}
 
 \truntime.Pkg.Descriptor.AID = "010100D3"
-\tgot, err = runtime.handleJletMethod("getCurrentProgramID", "()I")
-\tcheck(t, err)
-\tif got != 1 {{
-\t\tt.Fatalf("non-Inotia2 getCurrentProgramID = %d, want generic ARAM value 1", got)
+\tgot, ok = runtime.systemPropertyValue("PHONEMODEL")
+\tif !ok || got == "Emulator" {{
+\t\tt.Fatalf("non-Inotia2 PHONEMODEL unexpectedly uses W-Feature override: %q, %t", got, ok)
 \t}}
 }}
 '''
 TESTS.write_text(tests)
 
-print(f"patched {JLET} with title-scoped Inotia2 W-Feature program ID compatibility")
-print(f"updated {TESTS} with program-ID compatibility regression coverage")
+print(f"patched {KERNEL} with title-scoped Inotia2 W-Feature PHONEMODEL compatibility")
+print(f"updated {TESTS} with phone-model compatibility regression coverage")
