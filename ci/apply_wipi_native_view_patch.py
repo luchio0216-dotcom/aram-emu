@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Apply an Inotia1 WIPI-Emulator-style presentation preset.
 
-Important: WIPI Emulator itself renders a native 240x320 framebuffer and only
-scales that image to the available phone display area.  It does NOT widen the
-guest framebuffer.  ARAM's existing 320-wide experiment changes the guest's
-reported geometry, so the game exposes more world horizontally.
+WIPI Emulator itself keeps the guest framebuffer native 240x320 and only Fits
+that image into the available phone UI. This patch mirrors that presentation
+without forcing ARAM into immersive chrome-hidden mode.
 
-This patch reuses the 320 experiment menu slot as a presentation-only sentinel:
+Permanent behavior of this preset:
 - guest geometry stays native 240x320;
-- the touch build uses the immersive/fill viewport above the keypad;
-- aspect ratio is preserved;
+- normal ARAM top chrome/menu remains visible;
+- only the guest image uses largest aspect-preserving Fit inside its normal
+  viewport;
 - LCD post-processing is bypassed and nearest-neighbour sampling is used.
 
 No input or save-data code is touched here.
@@ -69,9 +69,8 @@ def patch_frontend(root: pathlib.Path) -> None:
 \tif width <= 0 {
 \t\treturn DisplaySettings{}
 \t}
-\t// 320 is the WIPI-view presentation preset in the Android compatibility
-\t// build. Keep the guest at its title-native 240x320 geometry and only make
-\t// the host presentation fill the available display area.
+\t// 320 is only a presentation sentinel in this compatibility build. The
+\t// title still sees its native 240x320 handset framebuffer.
 \tif width == 320 {
 \t\treturn DisplaySettings{}
 \t}
@@ -82,33 +81,30 @@ def patch_frontend(root: pathlib.Path) -> None:
     )
     display.write_text(text)
 
-    shell = root / "frontend" / "shell.go"
-    text = shell.read_text()
-    text = replace_once(
-        text,
-        '''\tif s.touchChromeHiddenActive() {
-\t\ts.drawImmersiveWorkspace(screen)
-\t\ts.drawTouchControls(screen)
-\t\ts.drawTouchChromeToggle(screen)
-\t\treturn
-\t}
-''',
-        '''\tif s.touchChromeHiddenActive() || s.settings.GuestWidthOverride == 320 {
-\t\t// WIPI Emulator keeps a native 240x320 guest and Fits it into all
-\t\t// available space above the keypad. Reuse ARAM's immersive viewport to
-\t\t// reproduce that presentation without changing the guest FOV.
-\t\ts.drawImmersiveWorkspace(screen)
-\t\ts.drawTouchControls(screen)
-\t\ts.drawTouchChromeToggle(screen)
-\t\treturn
-\t}
-''',
-        "immersive WIPI presentation",
-    )
-    shell.write_text(text)
-
     render = root / "frontend" / "render.go"
     text = render.read_text()
+
+    # Keep ARAM's ordinary chrome/menu path. Only make the guest image itself
+    # use the same largest aspect-preserving Fit calculation as immersive mode.
+    text = replace_once(
+        text,
+        '''func (s *Shell) drawGuestViewport(screen *ebiten.Image, viewport image.Rectangle) {
+\tpalette := defaultARAMPalette()
+''',
+        '''func (s *Shell) drawGuestViewport(screen *ebiten.Image, viewport image.Rectangle) {
+\trestoreFill := s.fillGuestViewport
+\tif s.settings.GuestWidthOverride == 320 {
+\t\t// WIPI-view keeps the normal ARAM app bar/menu visible and changes only
+\t\t// guest presentation. Do not route through drawImmersiveWorkspace.
+\t\ts.fillGuestViewport = true
+\t}
+\tdefer func() { s.fillGuestViewport = restoreFill }()
+
+\tpalette := defaultARAMPalette()
+''',
+        "WIPI fit inside normal chrome",
+    )
+
     text = replace_once(
         text,
         '''\tdisplay := s.displayProfile()
@@ -117,13 +113,13 @@ def patch_frontend(root: pathlib.Path) -> None:
         '''\tdisplay := s.displayProfile()
 \teffect := display.DisplayEffect
 \tif s.settings.GuestWidthOverride == 320 {
-\t\t// WIPI Emulator presents the framebuffer directly with nearest-neighbour
-\t\t// Fit. Avoid extra LCD/temporal shader passes in this compatibility mode.
+\t\t// WIPI Emulator presents the native framebuffer directly.
 \t\teffect = displayEffectOff
 \t}
 ''',
         "WIPI display effect bypass",
     )
+
     text = replace_once(
         text,
         '''\tif display.Filter == "linear" {
@@ -149,7 +145,7 @@ def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: apply_wipi_native_view_patch.py <aram-frontend-dir>")
     patch_frontend(pathlib.Path(sys.argv[1]).resolve())
-    print("Applied native 240x320 WIPI-view presentation patch")
+    print("Applied native 240x320 WIPI-view presentation with normal ARAM chrome")
 
 
 if __name__ == "__main__":
