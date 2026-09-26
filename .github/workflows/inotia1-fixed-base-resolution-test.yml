@@ -1,4 +1,4 @@
-name: Inotia1 fixed-base Y-axis resolution test APK
+name: Inotia1 fixed-base WIPI geometry APK
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: inotia1-fixed-base-resolution-${{ github.ref }}
+  group: inotia1-fixed-base-wipi-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   android:
-    name: Direction fix + WFS immutable base + Y-axis choices
+    name: Direction fix + WFS immutable base + real WIPI 240x320
     runs-on: ubuntu-latest
     steps:
       - name: Check out product
@@ -75,18 +75,21 @@ jobs:
             ../aram-frontend/frontend/shell_savedata.go \
             ../aram-frontend/frontend/picker.go > /tmp/inotia-base-before.sha256
 
-      - name: Apply Y-axis resolution choices only
+      - name: Apply real WIPI geometry at KTF framebuffer selection
         working-directory: aram-emu
         shell: bash
         run: |
           set -euxo pipefail
-          python3 ci/apply_inotia_resolution_choices.py ../aram-frontend
-          gofmt -w ../aram-frontend/frontend/shell_settings_display.go
-          grep -n 'return \[\]int{0, 340, 360, 384, 400, 426}' ../aram-frontend/frontend/shell_settings_display.go
-          grep -n 'Width: 240, Height: height' ../aram-frontend/frontend/shell_settings_display.go
-          grep -n '240 x %d Y test' ../aram-frontend/frontend/shell_settings_display.go
+          python3 ci/apply_inotia_resolution_choices.py ../aram-core ../aram-frontend
+          gofmt -w \
+            ../aram-core/application/internal/ktf/ktf_title_quirks.go \
+            ../aram-frontend/frontend/shell_settings_display.go
+          grep -n 'descriptor.AID == "010100D3"' ../aram-core/application/internal/ktf/ktf_title_quirks.go
+          grep -n 'return 240, 320' ../aram-core/application/internal/ktf/ktf_title_quirks.go
+          grep -n 'return \[\]int{0}' ../aram-frontend/frontend/shell_settings_display.go
+          grep -n 'WIPI fixed 240 x 320' ../aram-frontend/frontend/shell_settings_display.go
 
-      - name: Prove permanent base was not touched by resolution patch
+      - name: Prove permanent direction and WFS base stayed byte-identical
         working-directory: aram-emu
         shell: bash
         run: |
@@ -118,6 +121,11 @@ jobs:
           go test ./application/internal/ktf \
             -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges)$' \
             -count=1
+
+      - name: Test KTF package after geometry patch
+        working-directory: aram-core
+        shell: bash
+        run: go test ./application/internal/ktf -count=1
 
       - name: Test WFS backup and restore compatibility
         working-directory: aram-emu
@@ -157,7 +165,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets dist
-          build_version="Inotia1FixedBaseYAxis-${GITHUB_SHA::7}"
+          build_version="Inotia1WIPI240x320-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -169,13 +177,15 @@ jobs:
           {
             echo "aram-emu=${GITHUB_SHA}"
             echo "working-base=${WORKING_BASE}"
-            echo "aram-core=${CORE_REF}"
-            echo "aram-frontend=${FRONTEND_REF}"
+            echo "aram-core=${CORE_REF} + inotia-wipi-geometry"
+            echo "aram-frontend=${FRONTEND_REF} + width-experiment-disabled"
             echo "inotia1-direction-fix=core-clet-held-edges"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=wfs-compatible"
-            echo "resolution-mode=y-axis-only"
-            echo "resolution-choices=native-240x320,240x340,240x360,240x384,240x400,240x426"
+            echo "inotia-descriptor=176x220"
+            echo "wipi-host-geometry=240x320"
+            echo "geometry-layer=ktf-effective-display-size"
+            echo "stale-width-overrides=ignored"
             echo "graphics-core=stock"
             echo "frame-pipeline=stock"
           } > android/app/src/main/assets/BUILD-INFO.txt
@@ -185,29 +195,30 @@ jobs:
         shell: bash
         env:
           ARAM_VERSION_CODE: ${{ github.run_number }}
-          ARAM_VERSION_NAME: inotia1-fixedbase-yaxis-${{ github.run_number }}
+          ARAM_VERSION_NAME: inotia1-wipi240x320-${{ github.run_number }}
         run: |
           set -euxo pipefail
           gradle --no-daemon --stacktrace -p android :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
-          cp "${apk}" dist/aram-inotia1-fixedbase-yaxis-test.apk
-          info="$(unzip -p dist/aram-inotia1-fixedbase-yaxis-test.apk assets/BUILD-INFO.txt)"
+          cp "${apk}" dist/aram-inotia1-fixedbase-wipi240x320.apk
+          info="$(unzip -p dist/aram-inotia1-fixedbase-wipi240x320.apk assets/BUILD-INFO.txt)"
           printf '%s\n' "${info}"
           printf '%s\n' "${info}" | grep -Fx "working-base=${WORKING_BASE}"
           printf '%s\n' "${info}" | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           printf '%s\n' "${info}" | grep -Fx "save-backup=wfs-when-lossless"
           printf '%s\n' "${info}" | grep -Fx "save-restore=wfs-compatible"
-          printf '%s\n' "${info}" | grep -Fx "resolution-mode=y-axis-only"
-          printf '%s\n' "${info}" | grep -Fx "resolution-choices=native-240x320,240x340,240x360,240x384,240x400,240x426"
-          sha256sum dist/aram-inotia1-fixedbase-yaxis-test.apk > dist/SHA256SUMS.txt
+          printf '%s\n' "${info}" | grep -Fx "inotia-descriptor=176x220"
+          printf '%s\n' "${info}" | grep -Fx "wipi-host-geometry=240x320"
+          printf '%s\n' "${info}" | grep -Fx "geometry-layer=ktf-effective-display-size"
+          sha256sum dist/aram-inotia1-fixedbase-wipi240x320.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia1-fixedbase-yaxis-test
+          name: aram-inotia1-fixedbase-wipi240x320
           path: |
-            aram-emu/dist/aram-inotia1-fixedbase-yaxis-test.apk
+            aram-emu/dist/aram-inotia1-fixedbase-wipi240x320.apk
             aram-emu/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
