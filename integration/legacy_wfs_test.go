@@ -45,6 +45,8 @@ func (m *legacySaveTestMachine) Resume() error {
 	return nil
 }
 
+func (m *legacySaveTestMachine) Close() error { return nil }
+
 func (m *legacySaveTestMachine) ExportSaveData() ([]byte, error) {
 	if m.state == aramcore.StateRunning {
 		return nil, errors.New("cannot export while running")
@@ -145,7 +147,7 @@ func TestLegacyWFSImportMergesSaveFilesAndPreservesARAMSupportFiles(t *testing.T
 		"/save0.dat": []byte("empty slot"),
 	})
 	machine := &legacySaveTestMachine{data: baseline, state: aramcore.StateRunning}
-	backend := &Backend{stateRoot: t.TempDir(), machine: machine}
+	backend := &Backend{stateRoot: t.TempDir(), machine: machine, runRequested: true}
 	backend.input = frontend.InputInfo{SHA256: saveHashA}
 
 	legacy := encodeLegacyWFSForTest(t, saveHashA, map[string][]byte{
@@ -157,13 +159,21 @@ func TestLegacyWFSImportMergesSaveFilesAndPreservesARAMSupportFiles(t *testing.T
 	if err := backend.ImportSaveData(legacy); err != nil {
 		t.Fatalf("legacy import: %v", err)
 	}
-	if machine.state != aramcore.StateRunning || machine.pauseCount != 1 || machine.resumeCount != 1 {
+	if machine.state != aramcore.StatePaused || machine.pauseCount != 1 || machine.resumeCount != 0 {
 		t.Fatalf(
 			"machine state=%s pauses=%d resumes=%d",
 			machine.state, machine.pauseCount, machine.resumeCount,
 		)
 	}
+	if backend.runningRequested() {
+		t.Fatal("frame stepping remained enabled while the restored save awaited restart")
+	}
+	if backend.skipNextCloseSaveHash != saveHashA {
+		t.Fatalf("skip-close hash = %q, want %q", backend.skipNextCloseSaveHash, saveHashA)
+	}
 
+	// The old guest itself is intentionally not mutated. The restored storage is
+	// staged on disk and becomes live only after the frontend restarts the title.
 	files := decodeCoreSaveDataForTest(t, machine.data)
 	if got := string(files["/char.dat"]); got != "aram generated character table" {
 		t.Fatalf("char.dat was not preserved: %q", got)
@@ -171,14 +181,14 @@ func TestLegacyWFSImportMergesSaveFilesAndPreservesARAMSupportFiles(t *testing.T
 	if got := string(files["/map.dat"]); got != "aram generated map table" {
 		t.Fatalf("map.dat was not preserved: %q", got)
 	}
-	if got := string(files["/prefs"]); got != "legacy prefs" {
-		t.Fatalf("prefs = %q", got)
+	if got := string(files["/prefs"]); got != "current prefs" {
+		t.Fatalf("live prefs changed before restart: %q", got)
 	}
-	if got := string(files["/save0.dat"]); got != "level 16 rogue" {
-		t.Fatalf("save0.dat = %q", got)
+	if got := string(files["/save0.dat"]); got != "empty slot" {
+		t.Fatalf("live save0.dat changed before restart: %q", got)
 	}
-	if got := string(files["/save1.dat"]); got != "blank slot two" {
-		t.Fatalf("save1.dat = %q", got)
+	if _, ok := files["/save1.dat"]; ok {
+		t.Fatal("live save1.dat appeared before restart")
 	}
 
 	persisted, err := os.ReadFile(filepath.Join(backend.stateRoot, saveHashA, "savedata.bin"))
@@ -188,6 +198,24 @@ func TestLegacyWFSImportMergesSaveFilesAndPreservesARAMSupportFiles(t *testing.T
 	persistedFiles := decodeCoreSaveDataForTest(t, persisted)
 	if got := string(persistedFiles["/save0.dat"]); got != "level 16 rogue" {
 		t.Fatalf("persisted save0.dat = %q", got)
+	}
+	if got := string(persistedFiles["/char.dat"]); got != "aram generated character table" {
+		t.Fatalf("staged char.dat was not preserved: %q", got)
+	}
+
+	// Simulate the exact failure mode seen in Inotia 2: the old guest still has
+	// pre-restore save bytes when the frontend closes it for the restart.
+	machine.data = baseline
+	if err := backend.Close(); err != nil {
+		t.Fatalf("close after staged WFS restore: %v", err)
+	}
+	persisted, err = os.ReadFile(filepath.Join(backend.stateRoot, saveHashA, "savedata.bin"))
+	if err != nil {
+		t.Fatalf("read staged save after close: %v", err)
+	}
+	persistedFiles = decodeCoreSaveDataForTest(t, persisted)
+	if got := string(persistedFiles["/save0.dat"]); got != "level 16 rogue" {
+		t.Fatalf("close clobbered restored save0.dat: %q", got)
 	}
 }
 

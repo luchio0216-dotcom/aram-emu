@@ -133,11 +133,9 @@ func (backend *Backend) importLegacyWFSSave(
 \tif err != nil {
 \t\treturn err
 \t}
-\tif !strings.EqualFold(identity, current) {
-\t\treturn fmt.Errorf(
-\t\t\t"this legacy WFS save belongs to a different title (%s…), not the loaded one",
-\t\t\tshortSaveHash(identity),
-\t\t)
+\tlegacyFiles, err = backend.prepareLegacyWFSFiles(current, identity, legacyFiles)
+\tif err != nil {
+\t\treturn err
 \t}
 
 \twasRunning := machine.State() == aramcore.StateRunning
@@ -192,11 +190,9 @@ func (backend *Backend) importLegacyWFSSave(
 \tif err != nil {
 \t\treturn err
 \t}
-\tif !strings.EqualFold(identity, current) {
-\t\treturn fmt.Errorf(
-\t\t\t"this legacy WFS save belongs to a different title (%s…), not the loaded one",
-\t\t\tshortSaveHash(identity),
-\t\t)
+\tlegacyFiles, err = backend.prepareLegacyWFSFiles(current, identity, legacyFiles)
+\tif err != nil {
+\t\treturn err
 \t}
 
 \twasRunning := machine.State() == aramcore.StateRunning

@@ -191,10 +191,12 @@ func mergeLegacyWFSIntoSaveData(base []byte, legacy map[string][]byte) ([]byte, 
 	return out.Bytes(), nil
 }
 
-// importLegacyWFSSave pauses a running machine only long enough to take a
-// consistent storage snapshot, overlays the legacy save files, persists the
-// result, then resumes the game. This makes a WFS restore work on a fresh ARAM
-// launch while preserving the title-generated private support files.
+// importLegacyWFSSave takes a consistent snapshot of the live title, overlays
+// the legacy db/* files, and stages the merged ARAM storage on disk for the
+// frontend's immediate close/reopen. It intentionally does not resume or write
+// the merged bytes back into the old guest: games such as Inotia 2 cache their
+// save slot in memory and can otherwise overwrite the restored save0.dat before
+// the restart gets a chance to reload it.
 func (backend *Backend) importLegacyWFSSave(
 	machine aramcore.Machine,
 	capability saveDataMachine,
@@ -205,26 +207,32 @@ func (backend *Backend) importLegacyWFSSave(
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(identity, current) {
-		return fmt.Errorf(
-			"this legacy WFS save belongs to a different title (%s…), not the loaded one",
-			shortSaveHash(identity),
-		)
+	legacyFiles, err = backend.prepareLegacyWFSFiles(current, identity, legacyFiles)
+	if err != nil {
+		return err
 	}
 
 	wasRunning := machine.State() == aramcore.StateRunning
+	wasRequested := backend.runningRequested()
 	if wasRunning {
 		if err := machine.Pause(); err != nil {
 			return fmt.Errorf("legacy WFS save: pause title for restore: %w", err)
 		}
 	}
-	resumed := !wasRunning
+	restoreCommitted := false
 	defer func() {
-		if !resumed {
+		if restoreCommitted {
+			return
+		}
+		if wasRunning {
 			_ = machine.Resume()
 		}
+		backend.setRunRequested(wasRequested)
 	}()
 
+	// Stop product-level frame stepping while the successful restore waits for
+	// the frontend result handler to restart the title.
+	backend.setRunRequested(false)
 	base, err := capability.ExportSaveData()
 	if err != nil {
 		return fmt.Errorf("legacy WFS save: snapshot current storage: %w", err)
@@ -233,17 +241,14 @@ func (backend *Backend) importLegacyWFSSave(
 	if err != nil {
 		return err
 	}
-	if err := capability.ImportSaveData(merged); err != nil {
-		return fmt.Errorf("legacy WFS save: import merged storage: %w", err)
+	if err := backend.writeSaveData(current, merged); err != nil {
+		return fmt.Errorf("legacy WFS save: stage restored storage: %w", err)
 	}
-	if err := backend.persistSaveData(machine, current); err != nil {
-		return err
-	}
-	if wasRunning {
-		resumed = true
-		if err := machine.Resume(); err != nil {
-			return fmt.Errorf("legacy WFS save: resume title after restore: %w", err)
-		}
-	}
+
+	backend.mu.Lock()
+	backend.skipNextCloseSaveHash = current
+	backend.runRequested = false
+	backend.mu.Unlock()
+	restoreCommitted = true
 	return nil
 }

@@ -45,7 +45,11 @@ type Backend struct {
 	fontChoice    string
 	cpuChoice     string
 	runRequested  bool
-	lastFrameHash uint64
+	// skipNextCloseSaveHash is set only after a legacy WFS restore has already
+	// been durably staged for the imminent frontend restart. The old live guest
+	// must not overwrite that restored blob during the restart's Close().
+	skipNextCloseSaveHash string
+	lastFrameHash         uint64
 	// lastFramePixels retains the last published frame so the next one can be
 	// compared against it exactly instead of hashed.
 	lastFramePixels []byte
@@ -927,6 +931,9 @@ func (backend *Backend) Close() error {
 	machine := backend.machine
 	sourceFile := backend.sourceFile
 	closingHash := backend.input.SHA256
+	skipSavePersist := closingHash != "" &&
+		strings.EqualFold(backend.skipNextCloseSaveHash, closingHash)
+	backend.skipNextCloseSaveHash = ""
 	backend.machine = nil
 	backend.sourceFile = nil
 	backend.source = aramcore.Source{}
@@ -947,8 +954,12 @@ func (backend *Backend) Close() error {
 
 	var errs []error
 	if machine != nil {
-		// Flush the title's writable storage so saves survive a close/reopen.
-		errs = append(errs, backend.persistSaveData(machine, closingHash))
+		// Ordinary closes flush the live title. A successful WFS restore is the
+		// one exception: its merged blob is already durable and the live guest
+		// may still cache the old save, so persisting here would clobber it.
+		if !skipSavePersist {
+			errs = append(errs, backend.persistSaveData(machine, closingHash))
+		}
 		errs = append(errs, machine.Close())
 	}
 	if sourceFile != nil {

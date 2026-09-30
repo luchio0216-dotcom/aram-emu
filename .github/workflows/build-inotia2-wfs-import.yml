@@ -1,0 +1,272 @@
+name: Inotia2 W-Feature WFS import compatibility
+
+on:
+  push:
+    branches:
+      - fix/inotia2-wfeature-wfs-import
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inotia12-input-save-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORE_REF: eb891499fb89a592e55efb2cf0b97d0c3e89bb7f
+  FRONTEND_REF: 3291fea9de5fe79e085de97d031690899e2f7e06
+  AUTHD_REF: 4053607356dd89e621740388f7ec761e27ecee58
+
+jobs:
+  linux:
+    name: Linux validation build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Check out core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ env.FRONTEND_REF }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ env.AUTHD_REF }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aram-emu/go.mod
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev \
+            libxinerama-dev libxrandr-dev libxxf86vm-dev \
+            libasound2-dev pkg-config xvfb
+
+      - name: Apply Inotia compatibility patches
+        working-directory: aram-emu
+        run: |
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
+          python3 .github/scripts/apply_save_restore_restart.py
+          gofmt -w \
+            ../aram-core/application/internal/ktf/ktf_scheduler.go \
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/shell_results.go \
+            ../aram-frontend/frontend/picker.go
+          grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
+          grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
+
+      - name: Test focused KTF input regressions
+        working-directory: aram-core
+        run: |
+          go test ./application/internal/ktf \
+            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges|Inotia2DirectionsAndOKUseRegularHeldEdges)$' \
+            -count=1
+
+      - name: Test product
+        working-directory: aram-emu
+        run: xvfb-run -a go test ./... && go vet ./integration
+
+      - name: Build Linux validation binary
+        working-directory: aram-emu
+        run: |
+          mkdir -p dist/package
+          go build -trimpath -o dist/package/aram ./cmd/aram
+          go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
+          go test -c -o dist/package/aram-wfs-check.test ./integration
+          mkdir -p dist/package/display/bin dist/package/display/lib dist/package/display/share
+          cp /usr/bin/Xvfb dist/package/display/bin/
+          ldd /usr/bin/Xvfb | awk '/=> \/.* \(/ {print $3}' | while read -r lib; do cp -L "$lib" dist/package/display/lib/; done
+          cp -a /usr/share/X11/xkb dist/package/display/share/
+          go version > dist/package/GO-VERSION.txt
+          go list -m -json all > dist/package/dependencies.json
+          tar -C dist/package -czf dist/aram-inotia2-wfs-import-linux-amd64.tar.gz .
+
+      - name: Upload Linux validation build
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia2-wfs-import-linux-amd64
+          path: aram-emu/dist/aram-inotia2-wfs-import-linux-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Android compatibility APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Check out core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ env.FRONTEND_REF }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ env.AUTHD_REF }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Apply Inotia compatibility patches
+        working-directory: aram-emu
+        run: |
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
+          python3 .github/scripts/apply_save_restore_restart.py
+          gofmt -w \
+            ../aram-core/application/internal/ktf/ktf_scheduler.go \
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/shell_results.go \
+            ../aram-frontend/frontend/picker.go
+          grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
+          grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.8
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Test focused KTF input regressions
+        working-directory: aram-core
+        run: |
+          go test ./application/internal/ktf \
+            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges|Inotia2DirectionsAndOKUseRegularHeldEdges)$' \
+            -count=1
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.1.0"
+          cache-provider: basic
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          sdkmanager="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          test -x "${sdkmanager}"
+          "${sdkmanager}" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/28.2.13676358" >> "${GITHUB_ENV}"
+
+      - name: Build integrated Android AAR
+        working-directory: aram-emu
+        shell: bash
+        run: |
+          ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
+          go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
+          mkdir -p android/app/libs android/app/src/main/assets
+          build_version="Inotia2WFSImport-${GITHUB_SHA::7}"
+          ebitenmobile bind \
+            -target android/arm64,android/amd64 \
+            -androidapi 23 \
+            -trimpath \
+            -ldflags="-s -w -X=github.com/mirusu400/aram-frontend/frontend.BuildVersion=${build_version}" \
+            -javapkg io.github.mirusu400.aram \
+            -o android/app/libs/aram.aar \
+            ./mobile
+          {
+            echo "aram-emu=${GITHUB_SHA}"
+            echo "aram-core=${CORE_REF}"
+            echo "aram-frontend=${FRONTEND_REF}"
+            echo "inotia1-direction-fix=core-clet-held-edges"
+            echo "inotia2-input-fix=direction-ok-held-edges"
+            echo "save-backup=wfs-when-lossless"
+            echo "save-restore=restart-after-import"
+            echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
+            echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
+          } > android/app/src/main/assets/BUILD-INFO.txt
+          echo "ARAM_VERSION_NAME=${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Build Android APK
+        working-directory: aram-emu
+        env:
+          ARAM_VERSION_CODE: "1001"
+        run: |
+          gradle --no-daemon --stacktrace -p android \
+            :app:lintGithubDebug :app:assembleGithubDebug
+          apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
+          test -s "${apk}"
+          mkdir -p dist
+          cp "${apk}" dist/aram-inotia2-wfeature-wfs-import-android.apk
+
+      - name: Verify compatibility APK payload
+        working-directory: aram-emu
+        run: |
+          apk=dist/aram-inotia2-wfeature-wfs-import-android.apk
+          test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=direction-ok-held-edges"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
+
+      - name: Upload compatibility Android APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia2-wfeature-wfs-import-android
+          path: aram-emu/dist/aram-inotia2-wfeature-wfs-import-android.apk
+          if-no-files-found: error
+          retention-days: 14
