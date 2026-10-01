@@ -1,9 +1,9 @@
-name: Inotia2 mobile CALL button with input and save compatibility
+name: Inotia2 automatic pickup with CALL input and save compatibility
 
 on:
   push:
     branches:
-      - fix/inotia2-call-button
+      - fix/inotia2-autoloot
   workflow_dispatch:
 
 permissions:
@@ -79,7 +79,11 @@ jobs:
           python3 .github/scripts/apply_wfs_backup_extension.py
           python3 .github/scripts/apply_save_restore_restart.py
           python3 .github/scripts/apply_call_button.py
+          python3 .github/scripts/apply_inotia2_autoloot.py
           gofmt -w \
+            ../aram-core/application/machine_load.go \
+            ../aram-core/application/inotia2_autoloot.go \
+            ../aram-core/application/inotia2_autoloot_test.go \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
@@ -92,6 +96,10 @@ jobs:
           grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
           grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
+
+      - name: Test automatic pickup scope and capacity notification
+        working-directory: aram-core
+        run: go test ./application -run 'TestInotia2AutoLoot' -count=1
 
       - name: Test focused KTF input regressions
         working-directory: aram-core
@@ -124,19 +132,20 @@ jobs:
           go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
           go test -c -o dist/package/aram-wfs-check.test ./integration
           (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-input-check.test ./application/internal/ktf)
+          (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-autoloot-check.test ./application)
           mkdir -p dist/package/display/bin dist/package/display/lib dist/package/display/share
           cp /usr/bin/Xvfb dist/package/display/bin/
           ldd /usr/bin/Xvfb | awk '/=> \/.* \(/ {print $3}' | while read -r lib; do cp -L "$lib" dist/package/display/lib/; done
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-call-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-autoloot-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-call-linux-amd64
-          path: aram-emu/dist/aram-inotia2-call-linux-amd64.tar.gz
+          name: aram-inotia2-autoloot-linux-amd64
+          path: aram-emu/dist/aram-inotia2-autoloot-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -181,7 +190,11 @@ jobs:
           python3 .github/scripts/apply_wfs_backup_extension.py
           python3 .github/scripts/apply_save_restore_restart.py
           python3 .github/scripts/apply_call_button.py
+          python3 .github/scripts/apply_inotia2_autoloot.py
           gofmt -w \
+            ../aram-core/application/machine_load.go \
+            ../aram-core/application/inotia2_autoloot.go \
+            ../aram-core/application/inotia2_autoloot_test.go \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
@@ -205,6 +218,10 @@ jobs:
             aram-core/go.sum
             aram-frontend/go.sum
             aram-authd/go.sum
+
+      - name: Test automatic pickup scope and capacity notification
+        working-directory: aram-core
+        run: go test ./application -run 'TestInotia2AutoLoot' -count=1
 
       - name: Test focused KTF input regressions
         working-directory: aram-core
@@ -240,7 +257,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2CALL-${GITHUB_SHA::7}"
+          build_version="Inotia2AutoLoot-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -256,6 +273,7 @@ jobs:
             echo "inotia1-direction-fix=core-clet-held-edges"
             echo "inotia2-input-fix=all-key-held-edges"
             echo "mobile-call-button=send,custom-layout-safe"
+            echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
@@ -266,30 +284,31 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1003"
+          ARAM_VERSION_CODE: "1004"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-call-android.apk
+          cp "${apk}" dist/aram-inotia2-autoloot-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-call-android.apk
+          apk=dist/aram-inotia2-autoloot-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-call-android
-          path: aram-emu/dist/aram-inotia2-call-android.apk
+          name: aram-inotia2-autoloot-android
+          path: aram-emu/dist/aram-inotia2-autoloot-android.apk
           if-no-files-found: error
           retention-days: 14
