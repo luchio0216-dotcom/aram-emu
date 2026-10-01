@@ -36,6 +36,9 @@ func main() {
 	script := flag.String("script", "", "JSON command array")
 	mode := flag.String("cpu", "jit", "CPU backend")
 	out := flag.String("out", "", "private output directory")
+	budget := flag.Uint64("budget", 0, "override KTF guest instructions per presentation quantum")
+	perFrame := flag.Bool("frame-metrics", false, "record guest frame counters for each host quantum")
+	warmup := flag.Int("warmup", 0, "warmup host frames before profiling")
 	profile := flag.Bool("profile", false, "record CPU profile")
 	flag.Parse()
 	check(os.MkdirAll(*out, 0700))
@@ -45,6 +48,7 @@ func main() {
 	f := application.NewFactory()
 	f.FrameRunBudget = application.DefaultHandsetRunBudget
 	f.KTFRunBudget = application.DefaultKTFHandsetRunBudget
+	if *budget != 0 { f.KTFRunBudget = *budget }
 	f.NewCPU = func() cpu.Backend { b = newCPU(); return b }
 	ctx := context.Background()
 	m, err := f.Create(ctx, core.Source{Name: filepath.Base(*game), ReaderAt: bytes.NewReader(data), Size: int64(len(data)), SHA256: fmt.Sprintf("%x", sha256.Sum256(data))}); check(err)
@@ -59,6 +63,8 @@ func main() {
 	} else { check(m.Start(ctx)) }
 	var commands []command
 	s, err := os.ReadFile(*script); check(err); check(json.Unmarshal(s, &commands))
+	for frame := 0; frame < *warmup; frame++ { check(m.StepFrame(ctx)); for { audio := m.DrainAudio(); if len(audio.PCM16) == 0 { break } } }
+	frameMetrics := make([]map[string]any, 0)
 	var profileFile *os.File
 	if *profile { profileFile, err = os.Create(filepath.Join(*out, "cpu.pprof")); check(err); check(pprof.StartCPUProfile(profileFile)) }
 	reports := make([]map[string]any, 0, len(commands))
@@ -70,6 +76,7 @@ func main() {
 		for frame := 0; frame < c.Frames; frame++ {
 			tick := time.Now(); check(m.StepFrame(ctx)); durations = append(durations, time.Since(tick).Microseconds())
 			for { audio := m.DrainAudio(); if len(audio.PCM16) == 0 { break } }
+			if *perFrame { frameMetrics = append(frameMetrics, map[string]any{"label":c.Label,"frame":frame,"duration_us":durations[len(durations)-1],"snapshot":m.(*application.Machine).DebugSnapshot(0)}) }
 		}
 		elapsed := time.Since(start)
 		after := m.(*application.Machine).DebugSnapshot(1)
@@ -91,5 +98,6 @@ func main() {
 	}
 	if *profile { pprof.StopCPUProfile(); check(profileFile.Close()) }
 	encoded, err := json.MarshalIndent(reports,"","  "); check(err); check(os.WriteFile(filepath.Join(*out,"measurements.json"),encoded,0600))
+	if *perFrame { encoded, err := json.Marshal(frameMetrics); check(err); check(os.WriteFile(filepath.Join(*out,"frames.json"),encoded,0600)) }
 	fmt.Printf("completed %d private scenarios using %s\n",len(commands),*mode)
 }

@@ -1,0 +1,83 @@
+name: Inotia2 private field diagnostics tools
+on:
+  push:
+    branches: [fix/inotia2-field-performance]
+    paths: ['.github/workflows/inotia2-field-probes.yml', '.github/probes/inotia2-perf/**', '.github/scripts/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: field-probes-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: eb891499fb89a592e55efb2cf0b97d0c3e89bb7f
+          path: aram-core
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: 3291fea9de5fe79e085de97d031690899e2f7e06
+          path: aram-frontend
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: 4053607356dd89e621740388f7ec761e27ecee58
+          path: aram-authd
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.8
+          cache-dependency-path: aram-core/go.sum
+      - name: Apply existing compatibility patches
+        working-directory: aram-emu
+        run: |
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
+          python3 .github/scripts/apply_save_restore_restart.py
+          python3 .github/scripts/apply_call_button.py
+          python3 .github/scripts/apply_inotia2_autoloot.py
+          python3 .github/scripts/apply_android_native_pages.py
+          python3 .github/scripts/apply_audio_frame_smoothing.py
+          mkdir -p ../aram-core/cmd/inotia2-field-probe
+          cp .github/probes/inotia2-perf/*.go ../aram-core/cmd/inotia2-field-probe/
+      - name: Build tools and verify core
+        working-directory: aram-core
+        env:
+          GOWORK: off
+        run: |
+          gofmt -w cmd/inotia2-field-probe
+          go test ./...
+          go vet ./...
+          mkdir -p ../aram-emu/dist/package
+          go build -trimpath -o ../aram-emu/dist/package/aram-perf ./cmd/inotia2-field-probe
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -o ../aram-emu/dist/package/aram-perf-arm64 ./cmd/inotia2-field-probe
+          go build -trimpath -o ../aram-emu/dist/package/pprof cmd/pprof
+          go mod download
+      - name: Package offline local diagnostic workspace
+        run: |
+          mkdir -p aram-emu/dist/package/toolchain aram-emu/dist/package/module-cache
+          cp -a "$(go env GOROOT)"/. aram-emu/dist/package/toolchain/
+          cp -a "$(go env GOMODCACHE)"/. aram-emu/dist/package/module-cache/
+          cp -a aram-core aram-emu/dist/package/aram-core
+          rm -rf aram-emu/dist/package/aram-core/.git
+          (cd aram-emu/dist && apt-get download qemu-user-static)
+          dpkg-deb -x aram-emu/dist/qemu-user-static*.deb aram-emu/dist/qemu
+          cp aram-emu/dist/qemu/usr/bin/qemu-aarch64-static aram-emu/dist/package/
+          tar -C aram-emu/dist/package -czf aram-emu/dist/aram-field-diagnostics.tar.gz .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aram-field-diagnostics
+          path: aram-emu/dist/aram-field-diagnostics.tar.gz
+          retention-days: 14
+          if-no-files-found: error
