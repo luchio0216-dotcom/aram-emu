@@ -123,7 +123,7 @@ jobs:
           go build -trimpath -o dist/package/aram-perf ./.github/probes/inotia2-perf
           GOOS=linux GOARCH=arm64 go build -trimpath -o dist/package/aram-perf-arm64 ./.github/probes/inotia2-perf
           cp /usr/bin/qemu-aarch64-static dist/package/
-          cp "$(go env GOROOT)/pkg/tool/linux_amd64/pprof" dist/package/
+          go build -trimpath -o dist/package/pprof cmd/pprof
           go build -trimpath -o dist/package/aram ./cmd/aram
           go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
           go test -c -o dist/package/aram-wfs-check.test ./integration
