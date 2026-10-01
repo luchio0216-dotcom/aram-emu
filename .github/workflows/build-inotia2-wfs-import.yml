@@ -1,9 +1,9 @@
-name: Inotia2 all-key input and W-Feature save compatibility
+name: Inotia2 mobile CALL button with input and save compatibility
 
 on:
   push:
     branches:
-      - fix/inotia2-wfs-allkey
+      - fix/inotia2-call-button
   workflow_dispatch:
 
 permissions:
@@ -78,13 +78,16 @@ jobs:
           python3 .github/scripts/apply_inotia1_direction_fix.py
           python3 .github/scripts/apply_wfs_backup_extension.py
           python3 .github/scripts/apply_save_restore_restart.py
+          python3 .github/scripts/apply_call_button.py
           gofmt -w \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
             ../aram-frontend/frontend/shell_savedata.go \
             ../aram-frontend/frontend/shell_results.go \
-            ../aram-frontend/frontend/picker.go
+            ../aram-frontend/frontend/picker.go \
+            ../aram-frontend/frontend/touch.go \
+            ../aram-frontend/frontend/mobile_call_button_test.go
           grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
@@ -105,6 +108,10 @@ jobs:
         working-directory: aram-core
         run: go test ./... && go vet ./...
 
+      - name: Test mobile CALL button and frontend
+        working-directory: aram-frontend
+        run: xvfb-run -a go test ./frontend && go vet ./frontend
+
       - name: Test product
         working-directory: aram-emu
         run: xvfb-run -a go test ./... && go vet ./integration
@@ -123,13 +130,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-wfs-allkey-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-call-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-wfs-allkey-linux-amd64
-          path: aram-emu/dist/aram-inotia2-wfs-allkey-linux-amd64.tar.gz
+          name: aram-inotia2-call-linux-amd64
+          path: aram-emu/dist/aram-inotia2-call-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -173,13 +180,16 @@ jobs:
           python3 .github/scripts/apply_inotia1_direction_fix.py
           python3 .github/scripts/apply_wfs_backup_extension.py
           python3 .github/scripts/apply_save_restore_restart.py
+          python3 .github/scripts/apply_call_button.py
           gofmt -w \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
             ../aram-frontend/frontend/shell_savedata.go \
             ../aram-frontend/frontend/shell_results.go \
-            ../aram-frontend/frontend/picker.go
+            ../aram-frontend/frontend/picker.go \
+            ../aram-frontend/frontend/touch.go \
+            ../aram-frontend/frontend/mobile_call_button_test.go
           grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
@@ -230,7 +240,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2WFSAllKeys-${GITHUB_SHA::7}"
+          build_version="Inotia2CALL-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -245,6 +255,7 @@ jobs:
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
             echo "inotia2-input-fix=all-key-held-edges"
+            echo "mobile-call-button=send,custom-layout-safe"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
@@ -255,29 +266,30 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1002"
+          ARAM_VERSION_CODE: "1003"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-wfs-allkey-android.apk
+          cp "${apk}" dist/aram-inotia2-call-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-wfs-allkey-android.apk
+          apk=dist/aram-inotia2-call-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-wfs-allkey-android
-          path: aram-emu/dist/aram-inotia2-wfs-allkey-android.apk
+          name: aram-inotia2-call-android
+          path: aram-emu/dist/aram-inotia2-call-android.apk
           if-no-files-found: error
           retention-days: 14
