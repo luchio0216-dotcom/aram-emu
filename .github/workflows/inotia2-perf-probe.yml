@@ -1,0 +1,147 @@
+name: Inotia2 isolated performance probes
+
+on:
+  push:
+    branches:
+      - fix/inotia2-performance
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inotia12-input-save-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORE_REF: eb891499fb89a592e55efb2cf0b97d0c3e89bb7f
+  FRONTEND_REF: 3291fea9de5fe79e085de97d031690899e2f7e06
+  AUTHD_REF: 4053607356dd89e621740388f7ec761e27ecee58
+
+jobs:
+  linux:
+    name: Linux validation build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product
+        uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+
+      - name: Check out core
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+
+      - name: Check out frontend
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-frontend
+          ref: ${{ env.FRONTEND_REF }}
+          path: aram-frontend
+          persist-credentials: false
+
+      - name: Check out authd
+        uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-authd
+          ref: ${{ env.AUTHD_REF }}
+          path: aram-authd
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aram-emu/go.mod
+          cache-dependency-path: |
+            aram-emu/go.sum
+            aram-emu/go.work.sum
+            aram-core/go.sum
+            aram-frontend/go.sum
+            aram-authd/go.sum
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev \
+            libxinerama-dev libxrandr-dev libxxf86vm-dev \
+            libasound2-dev pkg-config xvfb qemu-user-static
+
+      - name: Apply Inotia compatibility patches
+        working-directory: aram-emu
+        run: |
+          python3 .github/scripts/apply_inotia1_direction_fix.py
+          python3 .github/scripts/apply_wfs_backup_extension.py
+          python3 .github/scripts/apply_save_restore_restart.py
+          python3 .github/scripts/apply_call_button.py
+          python3 .github/scripts/apply_inotia2_autoloot.py
+          gofmt -w \
+            ../aram-core/application/machine_load.go \
+            ../aram-core/application/inotia2_autoloot.go \
+            ../aram-core/application/inotia2_autoloot_test.go \
+            ../aram-core/application/internal/ktf/ktf_scheduler.go \
+            ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
+            ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
+            ../aram-frontend/frontend/shell_savedata.go \
+            ../aram-frontend/frontend/shell_results.go \
+            ../aram-frontend/frontend/picker.go \
+            ../aram-frontend/frontend/touch.go \
+            ../aram-frontend/frontend/mobile_call_button_test.go
+          grep -n "AID == \"010100D3\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
+          grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
+          grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
+
+      - name: Test automatic pickup scope and capacity notification
+        working-directory: aram-core
+        run: go test ./application -run 'TestInotia2AutoLoot' -count=1
+
+      - name: Test focused KTF input regressions
+        working-directory: aram-core
+        run: |
+          go test ./application/internal/ktf \
+            -run 'TestKTF(CletCardUsesNativeInputEdgeValues|Inotia1DirectionsUseRegularHeldEdges|Inotia2DirectionsAndOKUseRegularHeldEdges|Inotia2DirectionReleaseThenAnyKeyDoesNotRelatch|Inotia2QueuedDirectionReleaseThenAnyKey|Inotia2WFeaturePhoneNumberCompatibility)$' \
+            -count=1
+
+      - name: Verify regression catches the previous partial fix
+        working-directory: aram-emu
+        run: python3 .github/scripts/check_inotia2_allkey_regression.py
+
+      - name: Test performance probe
+        working-directory: aram-emu
+        run: go test ./.github/probes/inotia2-perf
+
+      - name: Build Linux validation binary
+        working-directory: aram-emu
+        run: |
+          mkdir -p dist/package
+          go build -trimpath -o dist/package/aram-perf ./.github/probes/inotia2-perf
+          GOOS=linux GOARCH=arm64 go build -trimpath -o dist/package/aram-perf-arm64 ./.github/probes/inotia2-perf
+          cp /usr/bin/qemu-aarch64-static dist/package/
+          cp "$(go env GOROOT)/pkg/tool/linux_amd64/pprof" dist/package/
+          go build -trimpath -o dist/package/aram ./cmd/aram
+          go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
+          go test -c -o dist/package/aram-wfs-check.test ./integration
+          (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-input-check.test ./application/internal/ktf)
+          (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-autoloot-check.test ./application)
+          mkdir -p dist/package/display/bin dist/package/display/lib dist/package/display/share
+          cp /usr/bin/Xvfb dist/package/display/bin/
+          ldd /usr/bin/Xvfb | awk '/=> \/.* \(/ {print $3}' | while read -r lib; do cp -L "$lib" dist/package/display/lib/; done
+          cp -a /usr/share/X11/xkb dist/package/display/share/
+          go version > dist/package/GO-VERSION.txt
+          go list -m -json all > dist/package/dependencies.json
+          tar -C dist/package -czf dist/aram-inotia2-performance-probes.tar.gz .
+
+      - name: Upload Linux validation build
+        uses: actions/upload-artifact@v7
+        with:
+          name: aram-inotia2-performance-probes
+          path: aram-emu/dist/aram-inotia2-performance-probes.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
