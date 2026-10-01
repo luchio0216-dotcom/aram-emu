@@ -81,7 +81,10 @@ jobs:
           python3 .github/scripts/apply_call_button.py
           python3 .github/scripts/apply_inotia2_autoloot.py
           python3 .github/scripts/apply_android_native_pages.py
+          python3 .github/scripts/apply_audio_frame_smoothing.py
           gofmt -w \
+            ../aram-core/runtime/media.go \
+            ../aram-core/runtime/media_smaf_frame_smoothing_test.go \
             ../aram-core/cpu/interpreter/native_mmap_arm64.go \
             ../aram-core/cpu/interpreter/native_android_pages_test.go \
             ../aram-core/application/machine_load.go \
@@ -103,6 +106,10 @@ jobs:
       - name: Test automatic pickup scope and capacity notification
         working-directory: aram-core
         run: go test ./application -run 'TestInotia2AutoLoot' -count=1
+
+      - name: Verify sample-identical SMAF frame smoothing
+        working-directory: aram-core
+        run: go test ./runtime -run "TestSMAF(FrameSmoothingPreservesPCM|RenderIsBitStable|ProbeEndMatchesRender)$" -count=1
 
       - name: Test focused KTF input regressions
         working-directory: aram-core
@@ -196,7 +203,10 @@ jobs:
           python3 .github/scripts/apply_call_button.py
           python3 .github/scripts/apply_inotia2_autoloot.py
           python3 .github/scripts/apply_android_native_pages.py
+          python3 .github/scripts/apply_audio_frame_smoothing.py
           gofmt -w \
+            ../aram-core/runtime/media.go \
+            ../aram-core/runtime/media_smaf_frame_smoothing_test.go \
             ../aram-core/cpu/interpreter/native_mmap_arm64.go \
             ../aram-core/cpu/interpreter/native_android_pages_test.go \
             ../aram-core/application/machine_load.go \
@@ -229,6 +239,10 @@ jobs:
       - name: Test automatic pickup scope and capacity notification
         working-directory: aram-core
         run: go test ./application -run 'TestInotia2AutoLoot' -count=1
+
+      - name: Verify sample-identical SMAF frame smoothing
+        working-directory: aram-core
+        run: go test ./runtime -run "TestSMAF(FrameSmoothingPreservesPCM|RenderIsBitStable|ProbeEndMatchesRender)$" -count=1
 
       - name: Test focused KTF input regressions
         working-directory: aram-core
@@ -281,7 +295,7 @@ jobs:
             echo "inotia2-input-fix=all-key-held-edges"
             echo "mobile-call-button=send,custom-layout-safe"
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
-            echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit"
+            echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
