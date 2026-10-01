@@ -64,14 +64,6 @@ jobs:
             aram-frontend/go.sum
             aram-authd/go.sum
 
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev \
-            libxinerama-dev libxrandr-dev libxxf86vm-dev \
-            libasound2-dev pkg-config xvfb qemu-user-static
-
       - name: Apply Inotia compatibility patches
         working-directory: aram-emu
         run: |
@@ -116,25 +108,14 @@ jobs:
         working-directory: aram-emu
         run: go test ./.github/probes/inotia2-perf
 
-      - name: Build Linux validation binary
+      - name: Build headless performance probes
         working-directory: aram-emu
         run: |
           mkdir -p dist/package
           go build -trimpath -o dist/package/aram-perf ./.github/probes/inotia2-perf
           GOOS=linux GOARCH=arm64 go build -trimpath -o dist/package/aram-perf-arm64 ./.github/probes/inotia2-perf
-          cp /usr/bin/qemu-aarch64-static dist/package/
           go build -trimpath -o dist/package/pprof cmd/pprof
-          go build -trimpath -o dist/package/aram ./cmd/aram
-          go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
-          go test -c -o dist/package/aram-wfs-check.test ./integration
-          (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-input-check.test ./application/internal/ktf)
-          (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-autoloot-check.test ./application)
-          mkdir -p dist/package/display/bin dist/package/display/lib dist/package/display/share
-          cp /usr/bin/Xvfb dist/package/display/bin/
-          ldd /usr/bin/Xvfb | awk '/=> \/.* \(/ {print $3}' | while read -r lib; do cp -L "$lib" dist/package/display/lib/; done
-          cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
-          go list -m -json all > dist/package/dependencies.json
           tar -C dist/package -czf dist/aram-inotia2-performance-probes.tar.gz .
 
       - name: Upload Linux validation build
