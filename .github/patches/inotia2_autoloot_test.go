@@ -57,12 +57,14 @@ func TestInotia2AutoLootSelectedHeroAndRegisterPreservation(t *testing.T) {
 		tag, pickups uint32
 	}{
 		{"selected hero", 0x200000, 0x200000, 4, 1},
+		{"empty field", 0x200000, 0x200000, 4, 0},
 		{"companion or NPC", 0x210000, 0x200000, 4, 0},
 		{"inactive actor", 0x200000, 0x200000, 0, 0},
 		{"no selected hero", 0x210000, 0, 4, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := inotia2AutoLootTestCPU(t)
+			if tc.name != "empty field" { inotia2AutoLootTestWrite(t, b, 0x194c6c, []byte{1,0,0,0}) }
 			inotia2AutoLootTestWrite(t, b, 0x12c580, []byte{byte(tc.tag), 0x20, 0x70, 0x47}) // movs r0, tag; bx lr
 			// Increment one synthetic pickup counter and return.
 			inotia2AutoLootTestWrite(t, b, 0x12ccf0, inotia2PatchBytes("0249086801300860704700bf7caa2a00"))
@@ -79,7 +81,7 @@ func TestInotia2AutoLootSelectedHeroAndRegisterPreservation(t *testing.T) {
 			if got := inotia2AutoLootTestReadRegister(t, b, cpu.RegisterR0); got != tc.tag { t.Fatalf("actor tag = %d, want %d", got, tc.tag) }
 			inotia2AutoLootTestPreserved(t, b)
 			flag := make([]byte, 4)
-			if err := b.ReadMemory(0x12b010, flag); err != nil { t.Fatal(err) }
+			if err := b.ReadMemory(0x2ad348, flag); err != nil { t.Fatal(err) }
 			if binary.LittleEndian.Uint32(flag) != 0 { t.Fatal("automatic pickup flag leaked beyond synchronous call") }
 		})
 	}
@@ -89,7 +91,7 @@ func TestInotia2AutoLootFullBagQuietOnlyDuringAutomaticCall(t *testing.T) {
 	for _, automatic := range []bool{false, true} {
 		t.Run(fmt.Sprintf("automatic=%t", automatic), func(t *testing.T) {
 			b := inotia2AutoLootTestCPU(t)
-			if automatic { inotia2AutoLootTestWrite(t, b, 0x12b010, []byte{1, 0, 0, 0}) }
+			if automatic { inotia2AutoLootTestWrite(t, b, 0x2ad348, []byte{1, 0, 0, 0}) }
 			// Synthetic success return at the native pickup epilogue target.
 			inotia2AutoLootTestWrite(t, b, 0x12ce1a, []byte{0, 0x20, 0, 0xbe})
 			inotia2AutoLootTestRegister(t, b, cpu.RegisterLR, 0x200101)
@@ -116,6 +118,9 @@ func TestInotia2AutoLootAuthorizedClientFixture(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if fmt.Sprintf("%x", sha256.Sum256(patched)) != inotia2AutoLootPatchedSHA { t.Fatal("patched client digest differs") }
 	if !bytes.Equal(original, before) { t.Fatal("package client mutated in place") }
+	size, err := inotia2AutoLootBSSSize(patched, 1149832)
+	if err != nil || size != 1149836 { t.Fatalf("scratch BSS = %d, %v",size,err) }
+	if _, err := inotia2AutoLootBSSSize(patched, 1149000); err == nil { t.Fatal("unexpected BSS accepted") }
 	again, err := inotia2AutoLootClient(patched)
 	if err != nil || !bytes.Equal(again, patched) { t.Fatal("automatic pickup patch is not idempotent") }
 	for i := range original {
@@ -167,3 +172,4 @@ func inotia2AutoLootTestPreserved(t *testing.T, b *interpreter.Backend) {
 		if got := inotia2AutoLootTestReadRegister(t, b, r); got != want { t.Fatalf("register %d = %#x, want %#x", r, got, want) }
 	}
 }
+

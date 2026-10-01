@@ -16,6 +16,8 @@ new = """	pkg ktf.Package,
 		client, err := inotia2AutoLootClient(pkg.Client)
 		if err != nil { return err }
 		pkg.Client = client
+		pkg.BSSSize, err = inotia2AutoLootBSSSize(client, pkg.BSSSize)
+		if err != nil { return err }
 	}
 	requiredMemory := uint64(len(pkg.Client)) +
 """
@@ -26,3 +28,4 @@ if new not in source:
 for name in ["inotia2_autoloot.go", "inotia2_autoloot_test.go"]:
     (CORE / name).write_text((ROOT / ".github" / "patches" / name).read_text())
 print("Installed hash-guarded Inotia2 automatic pickup with unchanged ZIP save identity")
+

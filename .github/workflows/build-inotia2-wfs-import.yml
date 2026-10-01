@@ -1,16 +1,16 @@
-name: Inotia2 automatic pickup with CALL input and save compatibility
+name: Inotia2 performance with CALL input and save compatibility
 
 on:
   push:
     branches:
-      - fix/inotia2-autoloot
+      - fix/inotia2-performance
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: inotia12-input-save-${{ github.ref }}
+  group: inotia2-performance-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -80,7 +80,10 @@ jobs:
           python3 .github/scripts/apply_save_restore_restart.py
           python3 .github/scripts/apply_call_button.py
           python3 .github/scripts/apply_inotia2_autoloot.py
+          python3 .github/scripts/apply_android_native_pages.py
           gofmt -w \
+            ../aram-core/cpu/interpreter/native_mmap_arm64.go \
+            ../aram-core/cpu/interpreter/native_android_pages_test.go \
             ../aram-core/application/machine_load.go \
             ../aram-core/application/inotia2_autoloot.go \
             ../aram-core/application/inotia2_autoloot_test.go \
@@ -130,6 +133,7 @@ jobs:
           mkdir -p dist/package
           go build -trimpath -o dist/package/aram ./cmd/aram
           go build -trimpath -o dist/package/aram-probe ./cmd/aram-probe
+          go build -trimpath -o dist/package/aram-perf ./.github/probes/inotia2-perf
           go test -c -o dist/package/aram-wfs-check.test ./integration
           (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-input-check.test ./application/internal/ktf)
           (cd ../aram-core && go test -c -o ../aram-emu/dist/package/aram-autoloot-check.test ./application)
@@ -139,13 +143,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-autoloot-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-performance-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-autoloot-linux-amd64
-          path: aram-emu/dist/aram-inotia2-autoloot-linux-amd64.tar.gz
+          name: aram-inotia2-performance-linux-amd64
+          path: aram-emu/dist/aram-inotia2-performance-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -191,7 +195,10 @@ jobs:
           python3 .github/scripts/apply_save_restore_restart.py
           python3 .github/scripts/apply_call_button.py
           python3 .github/scripts/apply_inotia2_autoloot.py
+          python3 .github/scripts/apply_android_native_pages.py
           gofmt -w \
+            ../aram-core/cpu/interpreter/native_mmap_arm64.go \
+            ../aram-core/cpu/interpreter/native_android_pages_test.go \
             ../aram-core/application/machine_load.go \
             ../aram-core/application/inotia2_autoloot.go \
             ../aram-core/application/inotia2_autoloot_test.go \
@@ -257,7 +264,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2AutoLoot-${GITHUB_SHA::7}"
+          build_version="Inotia2Performance-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -274,6 +281,7 @@ jobs:
             echo "inotia2-input-fix=all-key-held-edges"
             echo "mobile-call-button=send,custom-layout-safe"
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
+            echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
@@ -284,19 +292,19 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1004"
+          ARAM_VERSION_CODE: "1005"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-autoloot-android.apk
+          cp "${apk}" dist/aram-inotia2-performance-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-autoloot-android.apk
+          apk=dist/aram-inotia2-performance-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
@@ -308,7 +316,39 @@ jobs:
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-autoloot-android
-          path: aram-emu/dist/aram-inotia2-autoloot-android.apk
+          name: aram-inotia2-performance-android
+          path: aram-emu/dist/aram-inotia2-performance-android.apk
           if-no-files-found: error
           retention-days: 14
+
+  native-arm64:
+    name: ARM64 native page and CPU validation
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: aram-emu
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: mirusu400/aram-core
+          ref: ${{ env.CORE_REF }}
+          path: aram-core
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: aram-core/go.mod
+          cache-dependency-path: aram-core/go.sum
+      - name: Apply native executable memory page fix
+        working-directory: aram-emu
+        run: python3 .github/scripts/apply_android_native_pages.py
+      - name: Verify 16 KiB native executable page boundaries
+        working-directory: aram-core
+        env:
+          GOWORK: off
+        run: go test ./cpu/interpreter -run '^TestNativeArenaExecutesAcross16KProtectionPages$' -count=1 -v
+      - name: Native ARM and Thumb CPU regressions
+        working-directory: aram-core
+        env:
+          GOWORK: off
+        run: go test ./cpu/interpreter ./cpu/conformance -count=1

@@ -3,7 +3,7 @@ name: Inotia2 isolated performance probes
 on:
   push:
     branches:
-      - fix/inotia2-performance
+      - fix/inotia2-performance-probe-only
   workflow_dispatch:
 
 permissions:
