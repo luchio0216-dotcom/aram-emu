@@ -1,8 +1,5 @@
 name: Inotia2 private field diagnostics tools
 on:
-  push:
-    branches: [fix/inotia2-field-performance]
-    paths: ['.github/workflows/inotia2-field-probes.yml', '.github/probes/inotia2-perf/**', '.github/scripts/**']
   workflow_dispatch:
 permissions:
   contents: read
