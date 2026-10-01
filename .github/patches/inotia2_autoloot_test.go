@@ -118,9 +118,9 @@ func TestInotia2AutoLootAuthorizedClientFixture(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if fmt.Sprintf("%x", sha256.Sum256(patched)) != inotia2AutoLootPatchedSHA { t.Fatal("patched client digest differs") }
 	if !bytes.Equal(original, before) { t.Fatal("package client mutated in place") }
-	size, err := inotia2AutoLootBSSSize(patched, 1149832)
-	if err != nil || size != 1149836 { t.Fatalf("scratch BSS = %d, %v",size,err) }
-	if _, err := inotia2AutoLootBSSSize(patched, 1149000); err == nil { t.Fatal("unexpected BSS accepted") }
+	size, err := inotia2AutoLootMappedSize(patched, 608192+1149832)
+	if err != nil || size != 1761280 { t.Fatalf("scratch mapping = %d, %v",size,err) }
+	if _, err := inotia2AutoLootMappedSize(patched, 1149000); err == nil { t.Fatal("unexpected image size accepted") }
 	again, err := inotia2AutoLootClient(patched)
 	if err != nil || !bytes.Equal(again, patched) { t.Fatal("automatic pickup patch is not idempotent") }
 	for i := range original {

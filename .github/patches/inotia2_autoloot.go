@@ -24,9 +24,9 @@ func inotia2PatchBytes(value string) []byte {
 
 // These are newly assembled Thumb helpers, not game assets. The known Rare12
 // client already returns from its offline-ready check at 0x12af8c; reclaim
-// only that unreachable body and leave the text/BSS boundaries unchanged.
+// only that unreachable body and keep the original text and BSS metadata.
 // Empty ground lists skip pickup entirely. The automatic-call flag lives in
-// four new BSS bytes, away from JIT-translated code and native store barriers.
+// page-aligned image padding, away from translated code and store barriers.
 // The actor update hook preserves the original actor tag and callee registers,
 // then calls the game's proximity pickup only for the currently selected hero.
 // Native pickup retains its slot/stack checks and removes drops only after
@@ -68,11 +68,14 @@ func applyInotia2ImagePatches(client []byte, imageSHA string, patches []inotia2I
 }
 
 
-// Append scratch storage after the validated original BSS. Native globals keep
-// their addresses; the original ZIP/save identity is unchanged.
-func inotia2AutoLootBSSSize(client []byte, size uint32) (uint32, error) {
+// Reserve mapped padding after the original BSS without changing the BSS size
+// passed into bootstrap: the native module checks that argument against its
+// relocation header. Padding is zeroed on reset and saved with mapped memory.
+func inotia2AutoLootMappedSize(client []byte, size uint32) (uint32, error) {
  if fmt.Sprintf("%x", sha256.Sum256(client)) != inotia2AutoLootPatchedSHA { return size, nil }
- if size == 1149836 { return size, nil }
- if size != 1149832 { return 0, fmt.Errorf("Inotia2 automatic pickup BSS baseline mismatch: %d", size) }
- return size + 4, nil
+ const original = uint32(608192 + 1149832)
+ const padded = (original + 4095) &^ uint32(4095)
+ if size == padded { return size, nil }
+ if size != original { return 0, fmt.Errorf("Inotia2 automatic pickup image mapping baseline mismatch: %d", size) }
+ return padded, nil
 }

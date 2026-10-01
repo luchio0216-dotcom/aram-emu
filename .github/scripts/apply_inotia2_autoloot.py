@@ -16,8 +16,6 @@ new = """	pkg ktf.Package,
 		client, err := inotia2AutoLootClient(pkg.Client)
 		if err != nil { return err }
 		pkg.Client = client
-		pkg.BSSSize, err = inotia2AutoLootBSSSize(client, pkg.BSSSize)
-		if err != nil { return err }
 	}
 	requiredMemory := uint64(len(pkg.Client)) +
 """
@@ -25,6 +23,12 @@ if new not in source:
     if source.count(old) != 1:
         raise SystemExit("KTF client loader baseline did not match")
     loader.write_text(source.replace(old, new, 1))
+source = loader.read_text()
+old_map = "\truntime.DeferThreads = true\n"
+new_map = "\truntime.ImageSz, err = inotia2AutoLootMappedSize(pkg.Client, runtime.ImageSz)\n\tif err != nil { return err }\n\truntime.DeferThreads = true\n"
+if new_map not in source:
+    if source.count(old_map) != 1: raise SystemExit("KTF mapping baseline mismatch")
+    loader.write_text(source.replace(old_map, new_map, 1))
 for name in ["inotia2_autoloot.go", "inotia2_autoloot_test.go"]:
     (CORE / name).write_text((ROOT / ".github" / "patches" / name).read_text())
 print("Installed hash-guarded Inotia2 automatic pickup with unchanged ZIP save identity")
