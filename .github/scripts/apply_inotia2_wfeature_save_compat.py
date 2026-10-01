@@ -1,6 +1,7 @@
 from pathlib import Path
 
 KERNEL = Path("../aram-core/application/internal/ktf/ktf_wipic_kernel.go")
+SCHEDULER = Path("../aram-core/application/internal/ktf/ktf_scheduler.go")
 TESTS = Path("../aram-core/application/internal/ktf/ktf_clet_input_test.go")
 INOTIA2_AID = "010100D5"
 
@@ -27,6 +28,45 @@ if new not in source:
     source = source.replace(old, new, 1)
 KERNEL.write_text(source)
 
+# Inotia 2 needs one edge convention for the entire keypad, not only the
+# directions and OK/select. Mixing normal direction edges with inverted Clet
+# edges for digits/CLR/soft keys lets the title briefly re-latch the last held
+# direction when the next non-OK button is pressed. Keep every Inotia 2 Clet
+# key on ordinary press=KeyPressed/release=KeyReleased semantics. This remains
+# strictly title-scoped, so the generic Clet workaround and Inotia 1 behavior
+# are unchanged.
+scheduler = SCHEDULER.read_text()
+old_edges = f'''\t\t// Inotia 2 (AID {INOTIA2_AID}) uses the same ordinary edge values for
+\t\t// directions and the centre/OK key. Treating directions as ordinary but
+\t\t// leaving OK on the inverted Clet edge makes an OK press look like a
+\t\t// release immediately after a direction release; the title can then
+\t\t// re-latch its last movement direction. Keep all five gameplay keys on
+\t\t// one coherent edge convention so releasing a direction is final before
+\t\t// the following attack/OK press is delivered.
+\t\tif r.Pkg.Descriptor.AID == "{INOTIA2_AID}" {{
+\t\t\tswitch key {{
+\t\t\tcase -1, -2, -3, -4, -5: // up, down, left, right, OK/select
+\t\t\t\treturn eventType, nil
+\t\t\t}}
+\t\t}}
+'''
+new_edges = f'''\t\t// Inotia 2 (AID {INOTIA2_AID}) expects ordinary edge values for the
+\t\t// whole Clet keypad. If directions use ordinary edges but digits, CLR or
+\t\t// soft keys stay on the generic inverted Clet convention, pressing one of
+\t\t// those keys immediately after a direction release can re-latch the last
+\t\t// direction for one guest tick. Use one coherent press/release convention
+\t\t// for every Inotia 2 key so a direction release is final before any next
+\t\t// keypad event is delivered.
+\t\tif r.Pkg.Descriptor.AID == "{INOTIA2_AID}" {{
+\t\t\treturn eventType, nil
+\t\t}}
+'''
+if new_edges not in scheduler:
+    if old_edges not in scheduler:
+        raise SystemExit("Inotia2 direction/OK edge block did not match expected patched baseline")
+    scheduler = scheduler.replace(old_edges, new_edges, 1)
+SCHEDULER.write_text(scheduler)
+
 tests = TESTS.read_text()
 marker = "func TestKTFInotia2WFeaturePhoneNumberCompatibility"
 if marker not in tests:
@@ -49,7 +89,142 @@ func TestKTFInotia2WFeaturePhoneNumberCompatibility(t *testing.T) {{
 \t}}
 }}
 '''
+
+# The earlier input regression intentionally proved non-gameplay keys still
+# used the generic Clet ABI. That is now exactly the bug being fixed, so update
+# that expectation and add an explicit direction-release -> digit-4 sequence.
+old_soft = '''\tsoftPressed, err := runtime.keyEventType(card, -6, true)
+\tcheck(t, err)
+\tif softPressed != KeyReleased {
+\t\tt.Fatalf("Inotia2 non-gameplay Clet press event = %d, want native value %d", softPressed, KeyReleased)
+\t}
+'''
+new_soft = '''\tsoftPressed, err := runtime.keyEventType(card, -6, true)
+\tcheck(t, err)
+\tif softPressed != KeyPressed {
+\t\tt.Fatalf("Inotia2 non-gameplay Clet press event = %d, want regular value %d", softPressed, KeyPressed)
+\t}
+'''
+if new_soft not in tests:
+    if old_soft not in tests:
+        raise SystemExit("Inotia2 non-gameplay edge regression block did not match expected baseline")
+    tests = tests.replace(old_soft, new_soft, 1)
+
+marker_edges = "func TestKTFInotia2DirectionReleaseThenAnyKeyDoesNotRelatch"
+if marker_edges not in tests:
+    tests += f'''
+
+// TestKTFInotia2DirectionReleaseThenAnyKeyDoesNotRelatch reproduces the phone
+// keypad sequence seen in-game: release right, then immediately press digit 4.
+// The second event must be a fresh press, never an inverted release that lets
+// the title consume one more tick of the previous movement direction.
+func TestKTFInotia2DirectionReleaseThenAnyKeyDoesNotRelatch(t *testing.T) {{
+\truntime := newTestRuntime(t)
+\truntime.Pkg.Descriptor.AID = "{INOTIA2_AID}"
+\truntime.JvmContext = allocWords(t, runtime, 3+128)
+
+\tclass := inspectClass(t, runtime, ensureClass(t, runtime, "Clet$CletCard"))
+\t_, err := runtime.addHostJavaMethod(class, "keyNotify", "(II)Z")
+\tcheck(t, err)
+\tcard, err := runtime.NewJavaInstanceForClass(class)
+\tcheck(t, err)
+
+\trightReleased, err := runtime.keyEventType(card, -4, false)
+\tcheck(t, err)
+\tdigit4Pressed, err := runtime.keyEventType(card, int32('4'), true)
+\tcheck(t, err)
+\tif rightReleased != KeyReleased || digit4Pressed != KeyPressed {{
+\t\tt.Fatalf("Inotia2 right-release/digit4-press = (%d,%d), want (%d,%d)", rightReleased, digit4Pressed, KeyReleased, KeyPressed)
+\t}}
+
+\t// Representative non-direction keypad keys must all use the same ordinary
+\t// edge convention: digits, star/hash, CLR and soft/menu-style keys.
+\tfor _, key := range []int32{{'0', '1', '4', '9', '*', '#', -16, -6}} {{
+\t\tpressed, err := runtime.keyEventType(card, key, true)
+\t\tcheck(t, err)
+\t\treleased, err := runtime.keyEventType(card, key, false)
+\t\tcheck(t, err)
+\t\tif pressed != KeyPressed || released != KeyReleased {{
+\t\t\tt.Fatalf("Inotia2 key %d edges = (%d,%d), want (%d,%d)", key, pressed, released, KeyPressed, KeyReleased)
+\t\t}}
+\t}}
+}}
+'''
+
+# Exercise the real callback queue for every direction and phone keypad key.
+if "func TestKTFInotia2QueuedDirectionReleaseThenAnyKey" not in tests:
+    if '\t"fmt"\n' not in tests:
+        tests = tests.replace('import (\n', 'import (\n\t"fmt"\n', 1)
+    tests += '''
+
+// TestKTFInotia2QueuedDirectionReleaseThenAnyKey checks the callback registers
+// produced by the real input scheduler, including an input that has to wait
+// behind the direction's release task. A helper-only assertion cannot catch a
+// QueueKeyEvent call site accidentally retaining a different edge convention.
+func TestKTFInotia2QueuedDirectionReleaseThenAnyKey(t *testing.T) {
+	for _, direction := range []int32{-1, -2, -3, -4} {
+		for _, next := range []int32{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '#', -5, -6, -7, -8, -10, -11, -16} {
+			t.Run(fmt.Sprintf("direction_%d/key_%d", direction, next), func(t *testing.T) {
+				runtime := newTestRuntime(t)
+				runtime.Pkg.Descriptor.AID = "010100D5"
+				runtime.JvmContext = allocWords(t, runtime, 3+128)
+				class := inspectClass(t, runtime, ensureClass(t, runtime, "Clet$CletCard"))
+				_, err := runtime.addHostJavaMethod(class, "keyNotify", "(II)Z")
+				check(t, err)
+				card, err := runtime.NewJavaInstanceForClass(class)
+				check(t, err)
+				const display = uint32(0x10004000)
+				runtime.DefaultDisplay = display
+				runtime.DisplayCards[display] = card
+
+				queue := func(key int32, pressed bool, want uint32) *Task {
+					t.Helper()
+					queued, err := runtime.QueueKeyEvent(pressed, key)
+					check(t, err)
+					if !queued {
+						t.Fatalf("key %d edge %t did not queue", key, pressed)
+					}
+					task := runtime.pendingKeyTask(card)
+					if task == nil {
+						t.Fatal("queued key has no active callback")
+					}
+					check(t, runtime.CPU.RestoreContext(task.Context))
+					got, err := runtime.CPU.ReadRegister(cpu.RegisterR2)
+					check(t, err)
+					if got != want {
+						t.Fatalf("key %d edge %t queued type = %d, want %d", key, pressed, got, want)
+					}
+					code, err := runtime.CPU.ReadRegister(cpu.RegisterR3)
+					check(t, err)
+					if int32(code) != key {
+						t.Fatalf("queued key = %d, want %d", int32(code), key)
+					}
+					return task
+				}
+
+				held := queue(direction, true, KeyPressed)
+				held.Done = true
+				release := queue(direction, false, KeyReleased)
+				// The release callback must be consumed before a subsequent
+				// button may enter the same card. Retrying the blocked press
+				// must still deliver an ordinary press with the new key code.
+				queued, err := runtime.QueueKeyEvent(true, next)
+				check(t, err)
+				if queued || runtime.pendingKeyTask(card) != release {
+					t.Fatal("next key bypassed the pending direction release")
+				}
+				release.Done = true
+				press := queue(next, true, KeyPressed)
+				press.Done = true
+				up := queue(next, false, KeyReleased)
+				up.Done = true
+			})
+		}
+	}
+}
+'''
 TESTS.write_text(tests)
 
 print(f"patched {KERNEL} with title-scoped Inotia2 W-Feature PHONENUMBER compatibility")
-print(f"updated {TESTS} with phone-number compatibility regression coverage")
+print(f"patched {SCHEDULER} so every Inotia2 Clet key uses ordinary press/release edges")
+print(f"updated {TESTS} with W-Feature identity and direction-release/any-key regressions")
