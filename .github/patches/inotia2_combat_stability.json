@@ -1,0 +1,114 @@
+[
+  {
+    "scope": "core",
+    "path": "cpu/interpreter/backend.go",
+    "hunks": [
+      {
+        "before": "\t// subsequent executions to jump block-to-block without returning to Go.\n\t// Range invalidation zeros only the affected target slots.\n\tnativeLinks map[nativeLinkKey]*atomic.Uintptr\n\t// nativeSlow remembers memory instructions that repeatedly miss the inline\n\t// TLB (normally MMIO). Unconditional slow PCs become interpreter boundaries;\n\t// conditional ARM PCs remain in the native block and exit only when their\n",
+        "after": "\t// subsequent executions to jump block-to-block without returning to Go.\n\t// Range invalidation zeros only the affected target slots.\n\tnativeLinks map[nativeLinkKey]*atomic.Uintptr\n\t// Native Thumb indirect branches use a bounded tagged gate cache. The\n\t// backend owns it for as long as emitted code can reference its address.\n\tnativeIndirect []nativeIndirectEntry\n\t// nativeSlow remembers memory instructions that repeatedly miss the inline\n\t// TLB (normally MMIO). Unconditional slow PCs become interpreter boundaries;\n\t// conditional ARM PCs remain in the native block and exit only when their\n"
+      },
+      {
+        "before": "\t\tb.nativeARMBlocks = nil\n\t\tb.nativeARMBlockPages = nil\n\t\tb.nativeLinks = nil\n\t\tb.nativeSlow = nil\n\t\tb.nativeCodeLo, b.nativeCodeHi = ^uint32(0), 0\n\t\tb.tlbClear()\n",
+        "after": "\t\tb.nativeARMBlocks = nil\n\t\tb.nativeARMBlockPages = nil\n\t\tb.nativeLinks = nil\n\t\tb.nativeIndirect = nil\n\t\tb.nativeSlow = nil\n\t\tb.nativeCodeLo, b.nativeCodeHi = ^uint32(0), 0\n\t\tb.tlbClear()\n"
+      }
+    ]
+  },
+  {
+    "scope": "core",
+    "path": "cpu/interpreter/native_common.go",
+    "hunks": [
+      {
+        "before": "\n\t\"github.com/mirusu400/aram-core/cpu\"\n)\n\n// This file holds the portable, build-tag-free pieces of the optional native\n// JIT backend (see native_windows_amd64.go / native_android_arm64.go for the\n",
+        "after": "\n\t\"github.com/mirusu400/aram-core/cpu\"\n)\n\nconst nativeIndirectCacheSize = 8192\n\n// Each host entry is 16 bytes on the AArch64 path: an exact Thumb PC tag and\n// an executable gate. Gates retain the ordinary instruction-budget checks.\ntype nativeIndirectEntry struct {\n\ttag  atomic.Uint64\n\tgate atomic.Uintptr\n}\n\nfunc (b *Backend) enableNativeIndirect(e emitter) {\n\tif a, ok := e.(*arm64emitter); ok && b.systemBus == nil && len(b.nativeIndirect) != 0 {\n\t\ta.indirectThumb = uintptr(unsafe.Pointer(&b.nativeIndirect[0]))\n\t}\n}\n\n// This file holds the portable, build-tag-free pieces of the optional native\n// JIT backend (see native_windows_amd64.go / native_android_arm64.go for the\n"
+      },
+      {
+        "before": "\t\treturn\n\t}\n\tclear(b.nativeBlocks)\n\tclear(b.nativeBlockPages)\n\tclear(b.nativeARMBlocks)\n\tclear(b.nativeARMBlockPages)\n",
+        "after": "\t\treturn\n\t}\n\tclear(b.nativeBlocks)\n\tclear(b.nativeIndirect)\n\tclear(b.nativeBlockPages)\n\tclear(b.nativeARMBlocks)\n\tclear(b.nativeARMBlockPages)\n"
+      },
+      {
+        "before": "\t\tb.nativeLinks[key] = slot\n\t}\n\tslot.Store(gate)\n}\n\nfunc (b *Backend) clearNativeLink(mode cpu.Mode, pc uint32) {\n\tif slot := b.nativeLinks[nativeLinkKey{mode: mode, pc: pc}]; slot != nil {\n\t\tslot.Store(0)\n\t}\n}\n\n",
+        "after": "\t\tb.nativeLinks[key] = slot\n\t}\n\tslot.Store(gate)\n\tif mode == cpu.ModeThumb && len(b.nativeIndirect) != 0 {\n\t\tentry := &b.nativeIndirect[(pc>>1)&(nativeIndirectCacheSize-1)]\n\t\tentry.gate.Store(gate)\n\t\tentry.tag.Store(uint64(pc | 1))\n\t}\n}\n\nfunc (b *Backend) clearNativeLink(mode cpu.Mode, pc uint32) {\n\tif slot := b.nativeLinks[nativeLinkKey{mode: mode, pc: pc}]; slot != nil {\n\t\tslot.Store(0)\n\t}\n\tif mode == cpu.ModeThumb && len(b.nativeIndirect) != 0 {\n\t\tentry := &b.nativeIndirect[(pc>>1)&(nativeIndirectCacheSize-1)]\n\t\tif entry.tag.Load() == uint64(pc|1) {\n\t\t\tentry.gate.Store(0)\n\t\t}\n\t}\n}\n\n"
+      }
+    ]
+  },
+  {
+    "scope": "core",
+    "path": "cpu/interpreter/native_jit.go",
+    "hunks": [
+      {
+        "before": "\t// Phase 1: emit the straight-line body into a separate emitter and find the\n\t// terminator, counting retired instructions.\n\tbody := b.newEmitter()\n\tcur := pc\n\tcount := 0\n\tend := pc\n",
+        "after": "\t// Phase 1: emit the straight-line body into a separate emitter and find the\n\t// terminator, counting retired instructions.\n\tbody := b.newEmitter()\n\tb.enableNativeIndirect(body)\n\tcur := pc\n\tcount := 0\n\tend := pc\n"
+      },
+      {
+        "before": "\n\t// Phase 2: prologue, budget gate (the self-loop header), body, terminator.\n\tmain := b.newEmitter()\n\tmain.prologue()\n\tgateOff := main.mark()\n\tmain.gate(count, pc)\n",
+        "after": "\n\t// Phase 2: prologue, budget gate (the self-loop header), body, terminator.\n\tmain := b.newEmitter()\n\tb.enableNativeIndirect(main)\n\tmain.prologue()\n\tgateOff := main.mark()\n\tmain.gate(count, pc)\n"
+      }
+    ]
+  },
+  {
+    "scope": "core",
+    "path": "cpu/interpreter/native_aarch64emit.go",
+    "hunks": [
+      {
+        "before": "\tinterruptLines uintptr // address of Backend.interruptLines for system polls\n\tactiveCount    uintptr // address of Backend.nativeActiveCount\n\tbailAddress    uintptr // address of Backend.nativeBailAddress\n}\n\nvar _ emitter = (*arm64emitter)(nil)\n",
+        "after": "\tinterruptLines uintptr // address of Backend.interruptLines for system polls\n\tactiveCount    uintptr // address of Backend.nativeActiveCount\n\tbailAddress    uintptr // address of Backend.nativeBailAddress\n\tindirectThumb  uintptr // bounded tagged gates, application Thumb blocks only\n}\n\nvar _ emitter = (*arm64emitter)(nil)\n"
+      },
+      {
+        "before": "\t}\n\tif e.activeCount != 0 {\n\t\te.loadConst64(14, uint64(e.activeCount))\n\t}\n}\n\n",
+        "after": "\t}\n\tif e.activeCount != 0 {\n\t\te.loadConst64(14, uint64(e.activeCount))\n\t}\n\tif e.indirectThumb != 0 {\n\t\t// Linked gates skip the prologue. Keep the shared indirect table in\n\t\t// X15 across them, as the software TLB already does in X11/X12.\n\t\te.loadConst64(15, uint64(e.indirectThumb))\n\t}\n}\n\n"
+      },
+      {
+        "before": "\te.orrReg(3, 3, 4)\n\te.andReg(1, 1, 3)\n\te.strW(1, cpu.RegisterPC)\n\te.movz(0, nativeStatusMode)\n\te.ret()\n}\n",
+        "after": "\te.orrReg(3, 3, 4)\n\te.andReg(1, 1, 3)\n\te.strW(1, cpu.RegisterPC)\n\tif e.indirectThumb != 0 {\n\t\t// ARM mode changes always return to the architectural dispatcher.\n\t\te.lsrI(0, 2, 5)\n\t\te.andMask(0, 0, a64Mask1)\n\t\tarmTarget := e.mark()\n\t\te.w(0) // cbz w0,fallback\n\t\te.lsrI(0, 1, 1)\n\t\te.loadConst(3, nativeIndirectCacheSize-1)\n\t\te.andReg(0, 0, 3)\n\t\te.addLSL64(3, 15, 0, 4)\n\t\te.ldarX(4, 3)\n\t\te.addImm12(2, 1, 1) // exact Thumb tag = canonical PC | 1\n\t\te.subsReg(a64WZR, 4, 2)\n\t\tmiss := e.mark()\n\t\te.bCond(a64CondNE, 0)\n\t\te.addImm12X(3, 3, 8)\n\t\te.ldarX(0, 3)\n\t\tinvalid := e.mark()\n\t\te.w(0) // cbz x0,fallback\n\t\te.br(0)\n\t\tfallback := e.mark()\n\t\te.patchCBZ(armTarget, fallback, 0)\n\t\te.patchBCond(miss, fallback, a64CondNE)\n\t\te.patchCBZX(invalid, fallback, 0)\n\t}\n\te.movz(0, nativeStatusMode)\n\te.ret()\n}\n"
+      }
+    ]
+  },
+  {
+    "scope": "core",
+    "path": "cpu/interpreter/native_mmap_arm64.go",
+    "hunks": [
+      {
+        "before": "\t\tb.nativeARMBlocks = make(map[uint32]*nativeBlock)\n\t\tb.nativeARMBlockPages = make(blockPageIndex)\n\t\tb.nativeLinks = make(map[nativeLinkKey]*atomic.Uintptr)\n\t\tb.nativeSlow = make(map[nativeLinkKey]nativeSlowState)\n\t\tb.armJITBlocks = make(map[uint32]*jitBlock)\n\t\tb.armJITBlockPages = make(blockPageIndex)\n",
+        "after": "\t\tb.nativeARMBlocks = make(map[uint32]*nativeBlock)\n\t\tb.nativeARMBlockPages = make(blockPageIndex)\n\t\tb.nativeLinks = make(map[nativeLinkKey]*atomic.Uintptr)\n\t\tb.nativeIndirect = make([]nativeIndirectEntry, nativeIndirectCacheSize)\n\t\tb.nativeSlow = make(map[nativeLinkKey]nativeSlowState)\n\t\tb.armJITBlocks = make(map[uint32]*jitBlock)\n\t\tb.armJITBlockPages = make(blockPageIndex)\n"
+      }
+    ]
+  },
+  {
+    "scope": "frontend",
+    "path": "frontend/pacing.go",
+    "hunks": [
+      {
+        "before": "\t// guest skips ahead the way a handset drops frames, rather than building a\n\t// backlog it later works off as a fast-forward.\n\tframePacingQuantaPerTick = 8\n\t// framePacingSampleWindow is how long the measured speed is averaged over.\n\tframePacingSampleWindow = time.Second\n)\n",
+        "after": "\t// guest skips ahead the way a handset drops frames, rather than building a\n\t// backlog it later works off as a fast-forward.\n\tframePacingQuantaPerTick = 8\n\t// Publish a finished slow frame before starting another catch-up frame.\n\t// An instruction budget cannot bound wall time when combat gets expensive.\n\tframeWorkerBatchTime = 8 * time.Millisecond\n\t// framePacingSampleWindow is how long the measured speed is averaged over.\n\tframePacingSampleWindow = time.Second\n)\n"
+      },
+      {
+        "before": "\t}\n\ts.frameAccumulator -= time.Duration(owed) * quantum\n\treturn owed\n}\n\n// recordPacingSample tracks completed guest time against wall time. Recording\n",
+        "after": "\t}\n\ts.frameAccumulator -= time.Duration(owed) * quantum\n\treturn owed\n}\n\nfunc (s *Shell) restoreDeferredGuest(deferred time.Duration) {\n\tif deferred <= 0 {\n\t\treturn\n\t}\n\ts.frameAccumulator += deferred\n\tif ceiling := framePacingQuantaPerTick * s.frameQuantum(); s.frameAccumulator > ceiling {\n\t\ts.frameAccumulator = ceiling\n\t}\n}\n\n// recordPacingSample tracks completed guest time against wall time. Recording\n"
+      },
+      {
+        "before": "// at a time; scheduleRunningFrame only enqueues while no batch is in flight.\nfunc (s *Shell) runFrameWorker() {\n\truntime.LockOSThread()\n\tlowerCurrentThreadPriority()\n\tfor request := range s.frameRunRequests {\n\t\tvar (\n\t\t\tcompleted int\n\t\t\terr       error\n\t\t)\n\t\tif debugPacing {\n\t\t\tfmt.Fprintf(os.Stderr, \"worker: batch owed=%d\\n\", request.owed)\n\t\t}\n\t\tfor range request.owed {\n\t\t\tif err = request.backend.RunFrame(context.Background()); err != nil {\n\t\t\t\tbreak\n\t\t\t}\n\t\t\tcompleted++\n\t\t\tif request.uiPriority {\n\t\t\t\ttime.Sleep(uiPriorityFrameRest)\n\t\t\t}\n\t\t}\n\t\tif debugPacing {\n\t\t\tfmt.Fprintf(os.Stderr, \"worker: done completed=%d err=%v\\n\", completed, err)\n\t\t}\n\t\ts.frameRunResults <- frameRunResult{\n\t\t\tgeneration:      request.generation,\n\t\t\tcompletedQuanta: completed,\n\t\t\tguestAdvanced:   time.Duration(completed) * request.quantum,\n\t\t\tstartedAt:       request.startedAt,\n\t\t\tcompletedAt:     s.now(),\n\t\t\terr:             err,\n\t\t}\n\t}\n}\n\n// speedSettingValue labels the speed control with the achieved ratio beside the\n",
+        "after": "// at a time; scheduleRunningFrame only enqueues while no batch is in flight.\nfunc (s *Shell) runFrameWorker() {\n\truntime.LockOSThread()\n\tdefer runtime.UnlockOSThread()\n\tlowerCurrentThreadPriority()\n\tfor request := range s.frameRunRequests {\n\t\tif debugPacing {\n\t\t\tfmt.Fprintf(os.Stderr, \"worker: batch owed=%d\\n\", request.owed)\n\t\t}\n\t\tresult := executeFrameBatch(request, time.Now)\n\t\tresult.completedAt = s.now()\n\t\tif debugPacing {\n\t\t\tfmt.Fprintf(os.Stderr, \"worker: done completed=%d err=%v\\n\", result.completedQuanta, result.err)\n\t\t}\n\t\ts.frameRunResults <- result\n\t}\n}\n\n// A quantum runs to its ordinary completion, keeping guest time and input\n// deterministic. Only the host's batch ends early: the interface can publish\n// that frame, and unexecuted quanta are returned to the bounded pacing budget.\nfunc executeFrameBatch(request frameRunRequest, wallNow func() time.Time) frameRunResult {\n\tresult := frameRunResult{generation: request.generation, startedAt: request.startedAt}\n\tdeadline := wallNow().Add(frameWorkerBatchTime)\n\tfor range request.owed {\n\t\tif result.err = request.backend.RunFrame(context.Background()); result.err != nil {\n\t\t\tbreak\n\t\t}\n\t\tresult.completedQuanta++\n\t\tif request.uiPriority {\n\t\t\ttime.Sleep(uiPriorityFrameRest)\n\t\t}\n\t\tif !wallNow().Before(deadline) {\n\t\t\tbreak\n\t\t}\n\t}\n\tresult.guestAdvanced = time.Duration(result.completedQuanta) * request.quantum\n\tif result.err == nil {\n\t\tresult.deferredGuest = time.Duration(request.owed-result.completedQuanta) * request.quantum\n\t}\n\treturn result\n}\n\n// speedSettingValue labels the speed control with the achieved ratio beside the\n"
+      }
+    ]
+  },
+  {
+    "scope": "frontend",
+    "path": "frontend/shell.go",
+    "hunks": [
+      {
+        "before": "\tgeneration      uint64\n\tcompletedQuanta int\n\tguestAdvanced   time.Duration\n\tstartedAt       time.Time\n\tcompletedAt     time.Time\n\terr             error\n",
+        "after": "\tgeneration      uint64\n\tcompletedQuanta int\n\tguestAdvanced   time.Duration\n\tdeferredGuest   time.Duration\n\tstartedAt       time.Time\n\tcompletedAt     time.Time\n\terr             error\n"
+      }
+    ]
+  },
+  {
+    "scope": "frontend",
+    "path": "frontend/shell_results.go",
+    "hunks": [
+      {
+        "before": "\t\t\t\tcontinue\n\t\t\t}\n\t\t\ts.frameRunPending = false\n\t\t\ts.recordPacingSample(\n\t\t\t\tresult.startedAt,\n\t\t\t\tresult.completedAt,\n",
+        "after": "\t\t\t\tcontinue\n\t\t\t}\n\t\t\ts.frameRunPending = false\n\t\t\ts.restoreDeferredGuest(result.deferredGuest)\n\t\t\ts.recordPacingSample(\n\t\t\t\tresult.startedAt,\n\t\t\t\tresult.completedAt,\n"
+      }
+    ]
+  }
+]

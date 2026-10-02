@@ -1,16 +1,16 @@
-name: Inotia2 field frame pacing with input and save compatibility
+name: Inotia2 combat stability with input and save compatibility
 
 on:
   push:
     branches:
-      - fix/inotia2-field-performance
+      - fix/inotia2-combat-stability
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: inotia2-field-performance-apk-${{ github.ref }}
+  group: inotia2-combat-stability-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -83,6 +83,7 @@ jobs:
           python3 .github/scripts/apply_android_native_pages.py
           python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
+          python3 .github/scripts/apply_inotia2_combat_stability.py
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -159,13 +160,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-field-performance-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-combat-stability-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-field-performance-linux-amd64
-          path: aram-emu/dist/aram-inotia2-field-performance-linux-amd64.tar.gz
+          name: aram-inotia2-combat-stability-linux-amd64
+          path: aram-emu/dist/aram-inotia2-combat-stability-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -214,6 +215,7 @@ jobs:
           python3 .github/scripts/apply_android_native_pages.py
           python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
+          python3 .github/scripts/apply_inotia2_combat_stability.py
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -296,7 +298,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2FieldPerformance-${GITHUB_SHA::7}"
+          build_version="Inotia2CombatStability-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -324,19 +326,19 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1006"
+          ARAM_VERSION_CODE: "1007"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-field-performance-android.apk
+          cp "${apk}" dist/aram-inotia2-combat-stability-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-field-performance-android.apk
+          apk=dist/aram-inotia2-combat-stability-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
@@ -348,8 +350,8 @@ jobs:
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-field-performance-android
-          path: aram-emu/dist/aram-inotia2-field-performance-android.apk
+          name: aram-inotia2-combat-stability-android
+          path: aram-emu/dist/aram-inotia2-combat-stability-android.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -376,6 +378,7 @@ jobs:
         run: |
           python3 .github/scripts/apply_android_native_pages.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
+          python3 .github/scripts/apply_inotia2_combat_stability.py
       - name: Verify 16 KiB native executable page boundaries
         working-directory: aram-core
         env:
@@ -391,3 +394,4 @@ jobs:
         env:
           GOWORK: off
         run: go test ./cpu/interpreter ./cpu/conformance -count=1
+
