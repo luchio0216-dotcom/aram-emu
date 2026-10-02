@@ -1,4 +1,4 @@
-name: Inotia2 discard-aware automatic pickup with combat stability
+name: Inotia2 audio continuity and responsive combat frames
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: inotia2-discard-pickup-apk-${{ github.ref }}
+  group: inotia2-audio-continuity-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -84,6 +84,7 @@ jobs:
           python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
+          python3 .github/scripts/apply_audio_responsiveness.py
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -91,6 +92,9 @@ jobs:
             ../aram-core/application/inotia2_frame_pacing_test.go \
             ../aram-core/runtime/media.go \
             ../aram-core/runtime/media_smaf_frame_smoothing_test.go \
+            ../aram-core/runtime/media_smaf_blocks.go \
+            ../aram-core/runtime/media_smaf_blocks_test.go \
+            integration/backend.go integration/frame_quantum.go integration/haptics.go integration/frame_responsiveness_test.go \
             ../aram-core/cpu/interpreter/native_mmap_arm64.go \
             ../aram-core/cpu/interpreter/native_android_pages_test.go \
             ../aram-core/application/machine_load.go \
@@ -121,7 +125,7 @@ jobs:
 
       - name: Verify sample-identical SMAF frame smoothing
         working-directory: aram-core
-        run: go test ./runtime -run "TestSMAF(FrameSmoothingPreservesPCM|RenderIsBitStable|ProbeEndMatchesRender)$" -count=1
+        run: go test ./runtime -run "TestSMAF(FrameSmoothingPreservesPCM|RenderIsBitStable|ProbeEndMatchesRender|BlockGrowthKeepsPlayedPCMPrefixInPlace|BlocksResampleIdenticallyAcrossStorageSeams)$" -count=1
 
       - name: Test focused KTF input regressions
         working-directory: aram-core
@@ -141,6 +145,10 @@ jobs:
       - name: Test mobile CALL button and frontend
         working-directory: aram-frontend
         run: xvfb-run -a go test ./frontend && go vet ./frontend
+
+      - name: Verify host polling and input stay responsive during slow frames
+        working-directory: aram-emu
+        run: xvfb-run -a go test -race ./integration -run "^TestFrame(StateAndInput|InputBound|HapticsExpire)" -count=1
 
       - name: Test product
         working-directory: aram-emu
@@ -162,13 +170,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-discard-pickup-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-audio-continuity-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-discard-pickup-linux-amd64
-          path: aram-emu/dist/aram-inotia2-discard-pickup-linux-amd64.tar.gz
+          name: aram-inotia2-audio-continuity-linux-amd64
+          path: aram-emu/dist/aram-inotia2-audio-continuity-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -218,6 +226,7 @@ jobs:
           python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
+          python3 .github/scripts/apply_audio_responsiveness.py
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -225,6 +234,9 @@ jobs:
             ../aram-core/application/inotia2_frame_pacing_test.go \
             ../aram-core/runtime/media.go \
             ../aram-core/runtime/media_smaf_frame_smoothing_test.go \
+            ../aram-core/runtime/media_smaf_blocks.go \
+            ../aram-core/runtime/media_smaf_blocks_test.go \
+            integration/backend.go integration/frame_quantum.go integration/haptics.go integration/frame_responsiveness_test.go \
             ../aram-core/cpu/interpreter/native_mmap_arm64.go \
             ../aram-core/cpu/interpreter/native_android_pages_test.go \
             ../aram-core/application/machine_load.go \
@@ -266,7 +278,7 @@ jobs:
 
       - name: Verify sample-identical SMAF frame smoothing
         working-directory: aram-core
-        run: go test ./runtime -run "TestSMAF(FrameSmoothingPreservesPCM|RenderIsBitStable|ProbeEndMatchesRender)$" -count=1
+        run: go test ./runtime -run "TestSMAF(FrameSmoothingPreservesPCM|RenderIsBitStable|ProbeEndMatchesRender|BlockGrowthKeepsPlayedPCMPrefixInPlace|BlocksResampleIdenticallyAcrossStorageSeams)$" -count=1
 
       - name: Test focused KTF input regressions
         working-directory: aram-core
@@ -302,7 +314,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2DiscardPickup-${GITHUB_SHA::7}"
+          build_version="Inotia2AudioContinuity-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -321,6 +333,7 @@ jobs:
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
             echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
+            echo "audio-continuity=bounded-pcm-blocks,bit-identical-synthesis,nonblocking-frame-metadata,expiring-haptics,ordered-frame-input"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
@@ -331,19 +344,19 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1008"
+          ARAM_VERSION_CODE: "1009"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-discard-pickup-android.apk
+          cp "${apk}" dist/aram-inotia2-audio-continuity-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-discard-pickup-android.apk
+          apk=dist/aram-inotia2-audio-continuity-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
@@ -355,8 +368,8 @@ jobs:
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-discard-pickup-android
-          path: aram-emu/dist/aram-inotia2-discard-pickup-android.apk
+          name: aram-inotia2-audio-continuity-android
+          path: aram-emu/dist/aram-inotia2-audio-continuity-android.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -382,9 +395,11 @@ jobs:
         working-directory: aram-emu
         run: |
           python3 .github/scripts/apply_inotia2_autoloot.py
+          python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_android_native_pages.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
+          python3 .github/scripts/apply_audio_responsiveness.py
       - name: Verify 16 KiB native executable page boundaries
         working-directory: aram-core
         env:
@@ -395,6 +410,11 @@ jobs:
         env:
           GOWORK: off
         run: go test ./application -run '^TestInotia2(AutoLoot|CombatFrame|Frame)' -count=1 -v
+      - name: ARM64 sample-identical incremental music storage
+        working-directory: aram-core
+        env:
+          GOWORK: off
+        run: go test ./runtime -run "TestSMAF(Block|FrameSmoothingPreservesPCM|ProbeEndMatchesRender)" -count=1
       - name: Native ARM and Thumb CPU regressions
         working-directory: aram-core
         env:

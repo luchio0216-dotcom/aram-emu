@@ -1,6 +1,10 @@
 package integration
 
-import "time"
+import (
+	"time"
+
+	aramcore "github.com/mirusu400/aram-core/core"
+)
 
 // defaultFrameQuantum matches the native-WIPI presentation quantum in
 // aram-core. It is only used when the loaded machine cannot report its own.
@@ -17,12 +21,23 @@ type coreFrameQuantumReporter interface {
 // this rate to run a title at handset speed, and the rate is not the same for
 // every runtime.
 func (backend *Backend) FrameQuantum() time.Duration {
+	backend.mu.RLock()
+	defer backend.mu.RUnlock()
+	if backend.frameRunning {
+		return backend.frameQuantum
+	}
+	// Keep the read lock until the idle query finishes, so a guest frame
+	// cannot acquire ownership between testing frameRunning and this call.
+	return machineFrameQuantum(backend.machine)
+}
+
+func machineFrameQuantum(machine aramcore.Machine) time.Duration {
 	// The published machine is the cheat wrapper, which forwards the machine
 	// contract but not the optional reporting interfaces, so the quantum has to
 	// be read from the core machine underneath it. Reading it through the
 	// wrapper silently returned the native-WIPI fallback for every title and
 	// paced KTF titles four percent fast.
-	machine := unwrapMachine(backend.currentMachine())
+	machine = unwrapMachine(machine)
 	if machine == nil {
 		return defaultFrameQuantum
 	}

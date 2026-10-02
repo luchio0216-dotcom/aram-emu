@@ -1,0 +1,28 @@
+[
+  {
+    "path": "runtime/media.go",
+    "hunks": [
+      {
+        "before": "\tchannels   uint8\n\tsamples    []int16\n\tduration   time.Duration\n\tsmaf       *smafRenderStream\n}\n\ntype smafDecodeCacheKey struct {\n\tdigest     [sha256.Size]byte\n",
+        "after": "\tchannels   uint8\n\tsamples    []int16\n\tduration   time.Duration\n\tsmaf       *smafRenderStream\n\t// Lazy score PCM grows in fixed blocks instead of copying the played prefix.\n\tsmafBlocks [][]int16\n\tsmafFrames uint64\n}\n\ntype smafDecodeCacheKey struct {\n\tdigest     [sha256.Size]byte\n"
+      },
+      {
+        "before": "func (m *Media) smafCacheSamples() int {\n\ttotal := 0\n\tfor _, key := range m.smafCacheFIFO {\n\t\tif entry := m.smafCache[key]; entry.decoded != nil {\n\t\t\ttotal += len(entry.decoded.samples)\n\t\t}\n\t}\n\treturn total\n}\n",
+        "after": "func (m *Media) smafCacheSamples() int {\n\ttotal := 0\n\tfor _, key := range m.smafCacheFIFO {\n\t\tif entry := m.smafCache[key]; entry.decoded != nil {\n\t\t\ttotal += int(entry.decoded.pcmFrames()) * int(entry.decoded.channels)\n\t\t}\n\t}\n\treturn total\n}\n"
+      },
+      {
+        "before": "\t// together move the index by well under half a frame.\n\tif clip.decoded.sampleRate == m.limits.OutputSampleRate {\n\t\tframe = (cursor + uint64(time.Second)/2) / uint64(time.Second)\n\t\tclip.decoded.ensureFrame(frame)\n\t\tframes := uint64(len(clip.decoded.samples)) / uint64(clip.decoded.channels)\n\t\tif frame >= frames {\n\t\t\treturn 0, 0, false\n\t\t}\n\t\tif clip.decoded.channels == 1 {\n\t\t\tvalue := clip.decoded.samples[frame]\n\t\t\treturn value, value, true\n\t\t}\n\t\treturn clip.decoded.samples[frame*2], clip.decoded.samples[frame*2+1], true\n\t}\n\t// A rate the mixer does not share has to be reconstructed rather than\n\t// held; see media_resample.go for why the held version sounded wrong.\n\tkernel := resampleKernelFor(\n\t\tclip.decoded.sampleRate,\n\t\tm.limits.OutputSampleRate,\n\t)\n\tclip.decoded.ensureFrame(frame + uint64(kernel.half))\n\tframes := uint64(len(clip.decoded.samples)) / uint64(clip.decoded.channels)\n\tif frame >= frames {\n\t\treturn 0, 0, false\n\t}\n\tfraction := float64(cursor%uint64(time.Second)) / float64(time.Second)\n\tleft, right := clip.decoded.resampleAt(kernel, frame, fraction, frames)\n\treturn left, right, true\n}\n\nfunc (decoded *decodedPCM) ensureFrame(frame uint64) {\n\tif decoded == nil || decoded.smaf == nil ||\n\t\tframe < uint64(len(decoded.samples))/uint64(decoded.channels) {\n\t\treturn\n\t}\n\ttarget := frame + 1\n\tcurrent := uint64(len(decoded.samples)) / uint64(decoded.channels)\n\t// Keep lazy synthesis close to the samples the current frame needs.\n\t// A 2048-frame lookahead synthesized almost three 60 Hz audio frames\n\t// together at 44.1 kHz, creating periodic work bursts on the emulation\n\t// thread. Smaller batches preserve the synthesis order and exact PCM\n\t// while spreading that work across normal media advances.\n\tif target < current+256 {\n\t\ttarget = current + 256\n\t}\n\tdecoded.samples = decoded.smaf.renderUntil(decoded.samples, target)\n}\n\nfunc applyGain(left, right int16, gain uint32, pan int8) (int16, int16) {\n\tleftGain, rightGain := int64(gain), int64(gain)\n",
+        "after": "\t// together move the index by well under half a frame.\n\tif clip.decoded.sampleRate == m.limits.OutputSampleRate {\n\t\tframe = (cursor + uint64(time.Second)/2) / uint64(time.Second)\n\t\tclip.decoded.ensureFrame(frame)\n\t\tframes := clip.decoded.pcmFrames()\n\t\tif frame >= frames {\n\t\t\treturn 0, 0, false\n\t\t}\n\t\tif clip.decoded.channels == 1 {\n\t\t\tvalue := clip.decoded.pcmSample(frame)\n\t\t\treturn value, value, true\n\t\t}\n\t\treturn clip.decoded.pcmSample(frame*2), clip.decoded.pcmSample(frame*2+1), true\n\t}\n\t// A rate the mixer does not share has to be reconstructed rather than\n\t// held; see media_resample.go for why the held version sounded wrong.\n\tkernel := resampleKernelFor(\n\t\tclip.decoded.sampleRate,\n\t\tm.limits.OutputSampleRate,\n\t)\n\tclip.decoded.ensureFrame(frame + uint64(kernel.half))\n\tframes := clip.decoded.pcmFrames()\n\tif frame >= frames {\n\t\treturn 0, 0, false\n\t}\n\tfraction := float64(cursor%uint64(time.Second)) / float64(time.Second)\n\tleft, right := clip.decoded.resampleAt(kernel, frame, fraction, frames)\n\treturn left, right, true\n}\n\nfunc applyGain(left, right int16, gain uint32, pan int8) (int16, int16) {\n\tleftGain, rightGain := int64(gain), int64(gain)\n"
+      }
+    ]
+  },
+  {
+    "path": "runtime/media_resample.go",
+    "hunks": [
+      {
+        "before": "\t\t} else if index > last {\n\t\t\tindex = last\n\t\t}\n\t\tif stereo {\n\t\t\tleft += float64(decoded.samples[index*2]) * weight\n\t\t\tright += float64(decoded.samples[index*2+1]) * weight\n\t\t} else {\n\t\t\tleft += float64(decoded.samples[index]) * weight\n\t\t}\n\t}\n\tif !stereo {\n\t\tvalue := clampInt16(int64(math.Round(left)))\n",
+        "after": "\t\t} else if index > last {\n\t\t\tindex = last\n\t\t}\n\t\tif stereo {\n\t\t\tleft += float64(decoded.pcmSample(uint64(index*2))) * weight\n\t\t\tright += float64(decoded.pcmSample(uint64(index*2+1))) * weight\n\t\t} else {\n\t\t\tleft += float64(decoded.pcmSample(uint64(index))) * weight\n\t\t}\n\t}\n\tif !stereo {\n\t\tvalue := clampInt16(int64(math.Round(left)))\n"
+      }
+    ]
+  }
+]

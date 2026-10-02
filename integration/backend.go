@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	authd "github.com/mirusu400/aram-authd"
 	"github.com/mirusu400/aram-core/application"
@@ -33,18 +34,26 @@ const (
 var stateMagic = []byte("ARAMSTATE\x00")
 
 type Backend struct {
-	operationMu   sync.Mutex
-	mu            sync.RWMutex
-	factory       aramcore.Factory
-	machine       aramcore.Machine
-	sourceFile    *os.File
-	source        aramcore.Source
-	input         frontend.InputInfo
-	stateRoot     string
-	audio         frontend.AudioSettings
-	fontChoice    string
-	cpuChoice     string
-	runRequested  bool
+	operationMu  sync.Mutex
+	mu           sync.RWMutex
+	factory      aramcore.Factory
+	machine      aramcore.Machine
+	sourceFile   *os.File
+	source       aramcore.Source
+	input        frontend.InputInfo
+	stateRoot    string
+	audio        frontend.AudioSettings
+	fontChoice   string
+	cpuChoice    string
+	runRequested bool
+	// Host polling must not wait for a slow guest quantum. While a frame owns
+	// the machine, expose the metadata captured before it started under mu.
+	frameRunning      bool
+	frameState        aramcore.State
+	frameQuantum      time.Duration
+	frameHaptics      frontend.HapticsState
+	frameStarted      time.Time
+	pendingFrameInput []aramcore.InputEvent
 	// skipNextCloseSaveHash is set only after a legacy WFS restore has already
 	// been durably staged for the imminent frontend restart. The old live guest
 	// must not overwrite that restored blob during the restart's Close().
@@ -216,6 +225,8 @@ func (backend *Backend) OpenWithProgress(
 	oldMachine := backend.machine
 	oldFile := backend.sourceFile
 	backend.machine = machine
+	backend.pendingFrameInput = nil
+	backend.frameRunning = false
 	backend.sourceFile = sourceFile
 	backend.source = source
 	backend.input = info
@@ -394,13 +405,18 @@ func inspectSourceBytes(
 
 func (backend *Backend) State() frontend.BackendState {
 	backend.mu.RLock()
+	defer backend.mu.RUnlock()
 	machine := backend.machine
 	runRequested := backend.runRequested
-	backend.mu.RUnlock()
 	if machine == nil {
 		return frontend.StateEmpty
 	}
-	state := machine.State()
+	state := backend.frameState
+	if !backend.frameRunning {
+		// Retain the read lock until State returns: RunFrame marks its owner
+		// before entering StepFrame, so a frame cannot race this idle read.
+		state = machine.State()
+	}
 	if runRequested {
 		switch state {
 		case aramcore.StateReady, aramcore.StateRunning, aramcore.StatePaused:
@@ -581,7 +597,7 @@ func (backend *Backend) ExecuteCommand(
 
 // RunFrame advances one guest presentation quantum while preserving the
 // product-level running intent across the core's deterministic frame yield.
-func (backend *Backend) RunFrame(ctx context.Context) error {
+func (backend *Backend) RunFrame(ctx context.Context) (frameError error) {
 	backend.operationMu.Lock()
 	defer backend.operationMu.Unlock()
 
@@ -596,6 +612,36 @@ func (backend *Backend) RunFrame(ctx context.Context) error {
 			errors.New("no aram-core machine is loaded"),
 		)
 	}
+	backend.mu.Lock()
+	backend.frameState = machine.State()
+	backend.frameQuantum = machineFrameQuantum(machine)
+	backend.frameHaptics = machineHaptics(machine)
+	backend.frameStarted = time.Now()
+	backend.frameRunning = true
+	backend.mu.Unlock()
+	defer func() {
+		backend.mu.Lock()
+		defer backend.mu.Unlock()
+		// Input sampled during a slow frame belongs at its next boundary,
+		// exactly where the old blocking QueueInput call could deliver it.
+		// Preserve every edge in arrival order, especially releases before
+		// replacement directions or skills.
+		for index, event := range backend.pendingFrameInput {
+			if err := machine.QueueInput(event); err != nil {
+				backend.pendingFrameInput = backend.pendingFrameInput[index:]
+				backend.runRequested = false
+				if frameError == nil {
+					frameError = backendError(frontend.FailureUnknown, fmt.Errorf("frame input: %w", err))
+				}
+				backend.frameState = machine.State()
+				backend.frameRunning = false
+				return
+			}
+		}
+		backend.pendingFrameInput = backend.pendingFrameInput[:0]
+		backend.frameState = machine.State()
+		backend.frameRunning = false
+	}()
 	if err := machine.StepFrame(ctx); err != nil {
 		backend.setRunRequested(false)
 		return backendError(classifyMachineError(machine, err), err)
@@ -640,18 +686,27 @@ func (backend *Backend) VideoFrame() frontend.VideoFrame {
 }
 
 func (backend *Backend) QueueInput(event frontend.InputEvent) error {
-	machine := backend.currentMachine()
+	input := aramcore.InputEvent{Control: event.Control, Pressed: event.Pressed, At: event.At}
+	if err := input.Validate(); err != nil {
+		return err
+	}
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	machine := backend.machine
 	if machine == nil {
 		return backendError(
 			frontend.FailureBackendUnavailable,
 			errors.New("no aram-core machine is loaded"),
 		)
 	}
-	return machine.QueueInput(aramcore.InputEvent{
-		Control: event.Control,
-		Pressed: event.Pressed,
-		At:      event.At,
-	})
+	if backend.frameRunning {
+		if len(backend.pendingFrameInput) >= 1024 {
+			return errors.New("frame input queue is full")
+		}
+		backend.pendingFrameInput = append(backend.pendingFrameInput, input)
+		return nil
+	}
+	return machine.QueueInput(input)
 }
 
 func (backend *Backend) ConfigureAudio(settings frontend.AudioSettings) error {
@@ -935,6 +990,8 @@ func (backend *Backend) Close() error {
 		strings.EqualFold(backend.skipNextCloseSaveHash, closingHash)
 	backend.skipNextCloseSaveHash = ""
 	backend.machine = nil
+	backend.pendingFrameInput = nil
+	backend.frameRunning = false
 	backend.sourceFile = nil
 	backend.source = aramcore.Source{}
 	backend.input = frontend.InputInfo{}

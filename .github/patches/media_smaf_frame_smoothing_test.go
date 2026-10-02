@@ -22,20 +22,28 @@ func frameSmoothingScore(t testing.TB) []byte {
 func TestSMAFFrameSmoothingPreservesPCM(t *testing.T) {
 	score := frameSmoothingScore(t)
 	want := decodeSMAFPCM16(score, 44_100)
-	if want == nil { t.Fatal("synthetic score did not decode") }
-	d := &smafDecoder{rate:44_100}
-	if !d.parse(score) || !d.buildEvents() { t.Fatal("synthetic score rejected") }
-	got := &decodedPCM{sampleRate:44_100, channels:2, smaf:newSMAFRenderStream(d)}
-	for frame:=uint64(0); frame<uint64(len(want.samples)/2); frame++ {
+	if want == nil {
+		t.Fatal("synthetic score did not decode")
+	}
+	d := &smafDecoder{rate: 44_100}
+	if !d.parse(score) || !d.buildEvents() {
+		t.Fatal("synthetic score rejected")
+	}
+	got := &decodedPCM{sampleRate: 44_100, channels: 2, smaf: newSMAFRenderStream(d)}
+	for frame := uint64(0); frame < uint64(len(want.samples)/2); frame++ {
 		got.ensureFrame(frame)
-		for ch:=uint64(0); ch<2; ch++ {
-			i:=frame*2+ch
-			if i>=uint64(len(got.samples)) || got.samples[i]!=want.samples[i] {
-				t.Fatalf("PCM differs at frame %d channel %d",frame,ch)
+		for ch := uint64(0); ch < 2; ch++ {
+			i := frame*2 + ch
+			if frame >= got.pcmFrames() || got.pcmSample(i) != want.samples[i] {
+				t.Fatalf("PCM differs at frame %d channel %d", frame, ch)
 			}
 		}
-		if frames:=uint64(len(got.samples)/2); frames>frame+256 { t.Fatalf("excessive lazy lookahead: %d after frame %d",frames,frame) }
+		if frames := got.pcmFrames(); frames > frame+256 {
+			t.Fatalf("excessive lazy lookahead: %d after frame %d", frames, frame)
+		}
 	}
-	got.ensureFrame(uint64(len(want.samples)/2)+256)
-	if len(got.samples)!=len(want.samples) { t.Fatalf("release tail changed: got %d samples, want %d",len(got.samples),len(want.samples)) }
+	got.ensureFrame(uint64(len(want.samples)/2) + 256)
+	if got.pcmFrames()*2 != uint64(len(want.samples)) {
+		t.Fatalf("release tail changed: got %d samples, want %d", got.pcmFrames()*2, len(want.samples))
+	}
 }
