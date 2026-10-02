@@ -35,6 +35,15 @@ new_install = "\tif err := installInotia2AutoLootHelpers(pkg.Client, runtime.CPU
 if new_install not in source:
     if source.count(old_install) != 1: raise SystemExit("KTF helper installation baseline mismatch")
     loader.write_text(source.replace(old_install, new_install, 1))
+source = loader.read_text()
+# Full machine states save ImageInfo text/BSS, rather than every CPU mapping.
+# Include reserved flags/helper pages in that snapshot while leaving the
+# module's original pkg.BSSSize and bootstrap relocation arguments untouched.
+old_snapshot_size = "\t\tBSSSize:     pkg.BSSSize,\n"
+new_snapshot_size = "\t\tBSSSize:     runtime.ImageSz - uint32(len(pkg.Client)),\n"
+if new_snapshot_size not in source:
+    if source.count(old_snapshot_size) != 1: raise SystemExit("KTF snapshot padding baseline mismatch")
+    loader.write_text(source.replace(old_snapshot_size, new_snapshot_size, 1))
 reset = CORE / "machine.go"
 source = reset.read_text()
 old_reset_map = "\t\truntime.DeferThreads = true\n\t\tif err := runtime.ResetMappedMemory(); err != nil {"
