@@ -1,0 +1,89 @@
+[
+  {
+    "path": "runtime/media.go",
+    "hunks": [
+      {
+        "before": "\tmuted          bool\n\tpan            int8\n\tremainingPlays int32\n\twaitingForData bool\n}\n\n// Media is a deterministic, headless clip timeline and bounded PCM16 mixer.\n// It never opens a host audio device.\n",
+        "after": "\tmuted          bool\n\tpan            int8\n\tremainingPlays int32\n\twaitingForData bool\n\tcontinuousMusic bool // derived from the exact-title source policy\n}\n\n// Media is a deterministic, headless clip timeline and bounded PCM16 mixer.\n// It never opens a host audio device.\n"
+      },
+      {
+        "before": "\t// which stop and reuse their sole clip for one-shot effects. bgmVoice is the\n\t// captured infinite loop that continues while the registered clip is reused.\n\tpreserveStoppedLoops bool\n\tbgmVoice             *mediaClip\n\n\tvoiceIDs      []ServiceID\n\tvoiceScratch  []*mediaClip\n\tmixScratch    []int64\n",
+        "after": "\t// which stop and reuse their sole clip for one-shot effects. bgmVoice is the\n\t// captured infinite loop that continues while the registered clip is reused.\n\tpreserveStoppedLoops bool\n\tbgmVoice             *mediaClip\n\tcontinuousMusicSources [][sha256.Size]byte\n\tpendingMusicVoice *mediaClip\n\n\tvoiceIDs      []ServiceID\n\tvoiceScratch  []*mediaClip\n\tmixScratch    []int64\n"
+      },
+      {
+        "before": "\tclip.decoded = decodeWavePCM16(clip.source)\n\tclip.position = 0\n\tclip.remainingPlays = 0\n\tclip.waitingForData = false\n\tm.invalidateOutput()\n\treturn nil\n}\n\n// AvailableBytes reports the consumable encoded bytes remaining at the\n",
+        "after": "\tclip.decoded = decodeWavePCM16(clip.source)\n\tclip.position = 0\n\tclip.remainingPlays = 0\n\tclip.waitingForData = false\n\tclip.continuousMusic = false\n\tm.invalidateClipOutput()\n\treturn nil\n}\n\n// AvailableBytes reports the consumable encoded bytes remaining at the\n"
+      },
+      {
+        "before": "\tclip.source = cloneBytes(available[count:])\n\tclip.position = 0\n\tclip.decoded = decodeWavePCM16(clip.source)\n\tclip.waitingForData = false\n\tm.invalidateOutput()\n\treturn result, nil\n}\n\nfunc (m *Media) Clear(owner OwnerID, id ServiceID) error {\n",
+        "after": "\tclip.source = cloneBytes(available[count:])\n\tclip.position = 0\n\tclip.decoded = decodeWavePCM16(clip.source)\n\tclip.waitingForData = false\n\tclip.continuousMusic = false\n\tm.invalidateClipOutput()\n\treturn result, nil\n}\n\nfunc (m *Media) Clear(owner OwnerID, id ServiceID) error {\n"
+      },
+      {
+        "before": "\tclip.position = 0\n\tclip.state = ClipStopped\n\tclip.remainingPlays = 0\n\tclip.waitingForData = false\n\treturn nil\n}\n\n// Prepare decodes a complete stopped clip without starting playback or\n",
+        "after": "\tclip.position = 0\n\tclip.state = ClipStopped\n\tclip.remainingPlays = 0\n\tclip.waitingForData = false\n\tclip.continuousMusic = false\n\treturn nil\n}\n\n// Prepare decodes a complete stopped clip without starting playback or\n"
+      },
+      {
+        "before": "\t}\n\tif clip.decoded != nil && clip.position >= clip.decoded.duration {\n\t\tclip.position = 0\n\t}\n\t// A new loop is a deliberate BGM selection. Retire any voice captured from\n\t// the previous loop before the registered clip begins sounding.\n\tif plays == -1 && m.bgmVoice != nil {\n\t\tm.bgmVoice = nil\n\t\tm.invalidateOutput()\n\t}\n\tclip.remainingPlays = plays\n",
+        "after": "\t}\n\tif clip.decoded != nil && clip.position >= clip.decoded.duration {\n\t\tclip.position = 0\n\t}\n\tclip.continuousMusic = m.isContinuousMusicSource(clip.source)\n\tif clip.continuousMusic {\n\t\tm.selectContinuousMusic(clip)\n\t}\n\t// A new loop is a deliberate BGM selection. Retire any voice captured from\n\t// the previous loop before the registered clip begins sounding.\n\tif plays == -1 && m.bgmVoice != nil && len(m.continuousMusicSources) == 0 {\n\t\tm.bgmVoice = nil\n\t\tm.invalidateOutput()\n\t}\n\tclip.remainingPlays = plays\n"
+      },
+      {
+        "before": "\tif clip.state != ClipPlaying {\n\t\treturn fmt.Errorf(\"%w: pause media clip while %v\", ErrInvalidState, clip.state)\n\t}\n\tclip.state = ClipPaused\n\tm.invalidateOutput()\n\treturn nil\n}\n\nfunc (m *Media) Resume(owner OwnerID, id ServiceID) error {\n",
+        "after": "\tif clip.state != ClipPlaying {\n\t\treturn fmt.Errorf(\"%w: pause media clip while %v\", ErrInvalidState, clip.state)\n\t}\n\tclip.state = ClipPaused\n\tm.invalidateClipOutput()\n\treturn nil\n}\n\nfunc (m *Media) Resume(owner OwnerID, id ServiceID) error {\n"
+      },
+      {
+        "before": "\t}\n\tif clip.state != ClipPlaying && clip.state != ClipPaused && clip.state != ClipRecording {\n\t\treturn fmt.Errorf(\"%w: stop media clip while %v\", ErrInvalidState, clip.state)\n\t}\n\tif m.preserveStoppedLoops && clip.remainingPlays == -1 &&\n\t\tclip.decoded != nil && clip.decoded.duration > 0 {\n\t\tm.bgmVoice = &mediaClip{\n\t\t\tmediaType:      clip.mediaType,\n\t\t\tsource:         cloneBytes(clip.source),\n",
+        "after": "\t}\n\tif clip.state != ClipPlaying && clip.state != ClipPaused && clip.state != ClipRecording {\n\t\treturn fmt.Errorf(\"%w: stop media clip while %v\", ErrInvalidState, clip.state)\n\t}\n\tif m.preserveStoppedLoops && len(m.continuousMusicSources) == 0 && clip.remainingPlays == -1 &&\n\t\tclip.decoded != nil && clip.decoded.duration > 0 {\n\t\tm.bgmVoice = &mediaClip{\n\t\t\tmediaType:      clip.mediaType,\n\t\t\tsource:         cloneBytes(clip.source),\n"
+      },
+      {
+        "before": "\t}\n\tclip.state = ClipStopped\n\tclip.remainingPlays = 0\n\tclip.waitingForData = false\n\tm.invalidateOutput()\n\treturn nil\n}\n\nfunc (m *Media) Seek(owner OwnerID, id ServiceID, position time.Duration) error {\n",
+        "after": "\t}\n\tclip.state = ClipStopped\n\tclip.remainingPlays = 0\n\tclip.waitingForData = false\n\tm.invalidateClipOutput()\n\treturn nil\n}\n\nfunc (m *Media) Seek(owner OwnerID, id ServiceID, position time.Duration) error {\n"
+      },
+      {
+        "before": "\t\t// audio generation each time a title is saved.\n\t\treturn nil\n\t}\n\tclip.position = position\n\tm.invalidateOutput()\n\treturn nil\n}\n\n// OutputRevision changes whenever buffered audio becomes stale because of a\n",
+        "after": "\t\t// audio generation each time a title is saved.\n\t\treturn nil\n\t}\n\tclip.position = position\n\tm.invalidateClipOutput()\n\treturn nil\n}\n\n// OutputRevision changes whenever buffered audio becomes stale because of a\n"
+      },
+      {
+        "before": "\tif clip.volume == volume && clip.muted == muted && clip.pan == pan {\n\t\treturn nil\n\t}\n\tclip.volume, clip.muted, clip.pan = volume, muted, pan\n\tm.invalidateOutput()\n\treturn nil\n}\n\nfunc (m *Media) SetGlobalGain(volume uint8, muted bool) error {\n",
+        "after": "\tif clip.volume == volume && clip.muted == muted && clip.pan == pan {\n\t\treturn nil\n\t}\n\tclip.volume, clip.muted, clip.pan = volume, muted, pan\n\tif clip.continuousMusic && m.bgmVoice != nil && slices.Equal(m.bgmVoice.source, clip.source) {\n\t\tm.bgmVoice.volume, m.bgmVoice.muted, m.bgmVoice.pan = volume, muted, pan\n\t\tm.invalidateOutput()\n\t} else {\n\t\tm.invalidateClipOutput()\n\t}\n\treturn nil\n}\n\nfunc (m *Media) SetGlobalGain(volume uint8, muted bool) error {\n"
+      },
+      {
+        "before": "\tmixed := m.mixScratch\n\tfor _, clip := range voices {\n\t\tif clip.state != ClipPlaying || clip.decoded == nil ||\n\t\t\tclip.decoded.duration <= 0 || clip.muted || m.globalMute ||\n\t\t\tclip.volume == 0 || m.globalVolume == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tfor frame := firstFrame; frame < frameCount; frame++ {\n\t\t\toffset := durationForFrame(frame, m.limits.OutputSampleRate)\n",
+        "after": "\tmixed := m.mixScratch\n\tfor _, clip := range voices {\n\t\tif clip.state != ClipPlaying || clip.decoded == nil ||\n\t\t\tclip.decoded.duration <= 0 || clip.muted || m.globalMute ||\n\t\t\tclip.volume == 0 || m.globalVolume == 0 || clip.continuousMusic {\n\t\t\tcontinue\n\t\t}\n\t\tfor frame := firstFrame; frame < frameCount; frame++ {\n\t\t\toffset := durationForFrame(frame, m.limits.OutputSampleRate)\n"
+      },
+      {
+        "before": "\t\tOutputRemainder: m.outputRemainder,\n\t\tQueuedPCM16:     append([]int16(nil), m.queuedPCM16...),\n\t\tAudioMixMode:    m.mixMode,\n\t}\n\tif m.bgmVoice != nil {\n\t\tstate.BGMVoice = &BGMVoiceState{\n\t\t\tMediaType:  m.bgmVoice.mediaType,\n\t\t\tSource:     cloneBytes(m.bgmVoice.source),\n\t\t\tPositionNS: int64(m.bgmVoice.position),\n\t\t\tVolume:     m.bgmVoice.volume,\n\t\t\tPan:        m.bgmVoice.pan,\n\t\t}\n\t}\n\tfor _, id := range m.sortedClipIDs() {\n\t\tclip := m.clips[id]\n",
+        "after": "\t\tOutputRemainder: m.outputRemainder,\n\t\tQueuedPCM16:     append([]int16(nil), m.queuedPCM16...),\n\t\tAudioMixMode:    m.mixMode,\n\t}\n\tif voice := m.savedMusicVoice(); voice != nil {\n\t\tstate.BGMVoice = &BGMVoiceState{\n\t\t\tMediaType:  voice.mediaType,\n\t\t\tSource:     cloneBytes(voice.source),\n\t\t\tPositionNS: int64(voice.position),\n\t\t\tVolume:     voice.volume,\n\t\t\tPan:        voice.pan,\n\t\t}\n\t}\n\tfor _, id := range m.sortedClipIDs() {\n\t\tclip := m.clips[id]\n"
+      },
+      {
+        "before": "\t\t}\n\t\tif decoded != nil && time.Duration(v.PositionNS) > decoded.duration {\n\t\t\treturn fmt.Errorf(\"%w: media music voice position exceeds duration\", ErrInvalidState)\n\t\t}\n\t\tif m.preserveStoppedLoops && decoded != nil && decoded.duration > 0 {\n\t\t\tbgmVoice = &mediaClip{\n\t\t\t\tmediaType:      v.MediaType,\n\t\t\t\tsource:         cloneBytes(v.Source),\n\t\t\t\tdecoded:        decoded,\n",
+        "after": "\t\t}\n\t\tif decoded != nil && time.Duration(v.PositionNS) > decoded.duration {\n\t\t\treturn fmt.Errorf(\"%w: media music voice position exceeds duration\", ErrInvalidState)\n\t\t}\n\t\tif decoded != nil && decoded.duration > 0 {\n\t\t\tbgmVoice = &mediaClip{\n\t\t\t\tmediaType:      v.MediaType,\n\t\t\t\tsource:         cloneBytes(v.Source),\n\t\t\t\tdecoded:        decoded,\n"
+      },
+      {
+        "before": "\tm.globalMute = state.GlobalMute\n\tm.outputRemainder = state.OutputRemainder\n\tm.queuedPCM16 = append([]int16(nil), state.QueuedPCM16...)\n\tm.mixMode = state.AudioMixMode\n\tm.bgmVoice = bgmVoice\n\tm.outputRevision++\n\treturn nil\n}\n\nfunc looksLikeSequencedPrefix(data []byte) bool {\n",
+        "after": "\tm.globalMute = state.GlobalMute\n\tm.outputRemainder = state.OutputRemainder\n\tm.queuedPCM16 = append([]int16(nil), state.QueuedPCM16...)\n\tm.mixMode = state.AudioMixMode\n\tm.bgmVoice = nil\n\tm.pendingMusicVoice = nil\n\tif m.preserveStoppedLoops || (bgmVoice != nil && m.isContinuousMusicSource(bgmVoice.source)) {\n\t\tm.bgmVoice = bgmVoice\n\t} else {\n\t\tm.pendingMusicVoice = bgmVoice\n\t}\n\tfor _, clip := range clips {\n\t\tclip.continuousMusic = m.isContinuousMusicSource(clip.source)\n\t}\n\tm.outputRevision++\n\tm.reconcileContinuousMusic()\n\treturn nil\n}\n\nfunc looksLikeSequencedPrefix(data []byte) bool {\n"
+      }
+    ]
+  },
+  {
+    "path": "application/machine.go",
+    "hunks": [
+      {
+        "before": "// LoadState call it under m.mu.\nfunc (m *Machine) applyAudioMixMode() {\n\tif m.ktf != nil && m.ktf.Services != nil {\n\t\tm.ktf.Services.Media.SetAudioMixMode(m.audioMixMode)\n\t}\n\tif m.wipi != nil && m.wipi.Services != nil {\n\t\tm.wipi.Services.Media.SetAudioMixMode(m.audioMixMode)\n\t}\n",
+        "after": "// LoadState call it under m.mu.\nfunc (m *Machine) applyAudioMixMode() {\n\tif m.ktf != nil && m.ktf.Services != nil {\n\t\tm.ktf.Services.Media.SetAudioMixMode(m.audioMixMode)\n\t\tconfigureInotia2ContinuousMusic(m.ktf.Services.Media, m.inotia2FramePacing)\n\t}\n\tif m.wipi != nil && m.wipi.Services != nil {\n\t\tm.wipi.Services.Media.SetAudioMixMode(m.audioMixMode)\n\t}\n"
+      },
+      {
+        "before": "\t\t}\n\t\truntime.ImageSz, err = inotia2AutoLootMappedSize(pkg.Client, runtime.ImageSz)\n\t\tif err != nil { m.state = machinecore.StateFaulted; return err }\n\t\truntime.DeferThreads = true\n\t\tif err := runtime.ResetMappedMemory(); err != nil {\n\t\t\tm.state = machinecore.StateFaulted\n\t\t\treturn err\n\t\t}\n",
+        "after": "\t\t}\n\t\truntime.ImageSz, err = inotia2AutoLootMappedSize(pkg.Client, runtime.ImageSz)\n\t\tif err != nil { m.state = machinecore.StateFaulted; return err }\n\t\truntime.DeferThreads = true\n\t\tconfigureInotia2ContinuousMusic(runtime.Services.Media, m.inotia2FramePacing)\n\t\tif err := runtime.ResetMappedMemory(); err != nil {\n\t\t\tm.state = machinecore.StateFaulted\n\t\t\treturn err\n\t\t}\n"
+      }
+    ]
+  },
+  {
+    "path": "application/machine_load.go",
+    "hunks": [
+      {
+        "before": "\truntime.ImageSz, err = inotia2AutoLootMappedSize(pkg.Client, runtime.ImageSz)\n\tif err != nil { return err }\n\truntime.DeferThreads = true\n\tm.inotia2FramePacing = inotia2FramePacingMatches(pkg.Descriptor.AID, pkg.Descriptor.MainClass, sha256.Sum256(pkg.Client))\n\tif limit, ok := ktfrt.PresentationLimit(pkg); ok {\n\t\tm.ktfPresentsPerQuantum = limit\n\t} else {\n\t\tm.ktfPresentsPerQuantum = 0\n",
+        "after": "\truntime.ImageSz, err = inotia2AutoLootMappedSize(pkg.Client, runtime.ImageSz)\n\tif err != nil { return err }\n\truntime.DeferThreads = true\n\tm.inotia2FramePacing = inotia2FramePacingMatches(pkg.Descriptor.AID, pkg.Descriptor.MainClass, sha256.Sum256(pkg.Client))\n\tconfigureInotia2ContinuousMusic(runtime.Services.Media, m.inotia2FramePacing)\n\tif limit, ok := ktfrt.PresentationLimit(pkg); ok {\n\t\tm.ktfPresentsPerQuantum = limit\n\t} else {\n\t\tm.ktfPresentsPerQuantum = 0\n"
+      }
+    ]
+  }
+]

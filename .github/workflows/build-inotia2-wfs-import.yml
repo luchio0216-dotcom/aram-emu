@@ -1,4 +1,4 @@
-name: Inotia2 audio continuity and responsive combat frames
+name: Inotia2 continuous background music test APK
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: inotia2-audio-continuity-apk-${{ github.ref }}
+  group: inotia2-continuous-music-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -85,6 +85,7 @@ jobs:
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
           python3 .github/scripts/apply_audio_responsiveness.py
+          python3 .github/scripts/apply_inotia2_continuous_music.py
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -94,6 +95,10 @@ jobs:
             ../aram-core/runtime/media_smaf_frame_smoothing_test.go \
             ../aram-core/runtime/media_smaf_blocks.go \
             ../aram-core/runtime/media_smaf_blocks_test.go \
+            ../aram-core/runtime/media_continuous_music.go \
+            ../aram-core/runtime/media_continuous_music_test.go \
+            ../aram-core/application/inotia2_continuous_music.go \
+            ../aram-core/application/inotia2_continuous_music_test.go \
             integration/backend.go integration/frame_quantum.go integration/haptics.go integration/frame_responsiveness_test.go \
             ../aram-core/cpu/interpreter/native_mmap_arm64.go \
             ../aram-core/cpu/interpreter/native_android_pages_test.go \
@@ -114,6 +119,12 @@ jobs:
           grep -n "AID == \"010100D5\"" ../aram-core/application/internal/ktf/ktf_scheduler.go
           grep -n 'WFSAVEBK' ../aram-frontend/frontend/shell_savedata.go
           grep -n 'restartCurrentTitle' ../aram-frontend/frontend/shell_results.go
+
+      - name: Verify background music continues over effects and menus
+        working-directory: aram-core
+        run: |
+          go test ./runtime -run '^TestContinuousMusic' -count=1
+          go test ./application -run '^TestInotia2ContinuousMusic' -count=1
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
@@ -170,13 +181,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-audio-continuity-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-continuous-music-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-audio-continuity-linux-amd64
-          path: aram-emu/dist/aram-inotia2-audio-continuity-linux-amd64.tar.gz
+          name: aram-inotia2-continuous-music-linux-amd64
+          path: aram-emu/dist/aram-inotia2-continuous-music-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -227,6 +238,7 @@ jobs:
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
           python3 .github/scripts/apply_audio_responsiveness.py
+          python3 .github/scripts/apply_inotia2_continuous_music.py
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -236,6 +248,10 @@ jobs:
             ../aram-core/runtime/media_smaf_frame_smoothing_test.go \
             ../aram-core/runtime/media_smaf_blocks.go \
             ../aram-core/runtime/media_smaf_blocks_test.go \
+            ../aram-core/runtime/media_continuous_music.go \
+            ../aram-core/runtime/media_continuous_music_test.go \
+            ../aram-core/application/inotia2_continuous_music.go \
+            ../aram-core/application/inotia2_continuous_music_test.go \
             integration/backend.go integration/frame_quantum.go integration/haptics.go integration/frame_responsiveness_test.go \
             ../aram-core/cpu/interpreter/native_mmap_arm64.go \
             ../aram-core/cpu/interpreter/native_android_pages_test.go \
@@ -267,6 +283,12 @@ jobs:
             aram-core/go.sum
             aram-frontend/go.sum
             aram-authd/go.sum
+
+      - name: Verify background music continues over effects and menus
+        working-directory: aram-core
+        run: |
+          go test ./runtime -run '^TestContinuousMusic' -count=1
+          go test ./application -run '^TestInotia2ContinuousMusic' -count=1
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
@@ -314,7 +336,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2AudioContinuity-${GITHUB_SHA::7}"
+          build_version="Inotia2ContinuousMusic-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -333,6 +355,7 @@ jobs:
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
             echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
+            echo "inotia2-continuous-bgm=exact-title-and-track-hashes,independent-loop,effects-and-menu-safe,same-track-cursor-preserved"
             echo "audio-continuity=bounded-pcm-blocks,bit-identical-synthesis,nonblocking-frame-metadata,expiring-haptics,ordered-frame-input"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
@@ -344,23 +367,24 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1009"
+          ARAM_VERSION_CODE: "1010"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-audio-continuity-android.apk
+          cp "${apk}" dist/aram-inotia2-continuous-music-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-audio-continuity-android.apk
+          apk=dist/aram-inotia2-continuous-music-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-continuous-bgm=exact-title-and-track-hashes,independent-loop,effects-and-menu-safe,same-track-cursor-preserved"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
@@ -368,8 +392,8 @@ jobs:
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-audio-continuity-android
-          path: aram-emu/dist/aram-inotia2-audio-continuity-android.apk
+          name: aram-inotia2-continuous-music-android
+          path: aram-emu/dist/aram-inotia2-continuous-music-android.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -400,6 +424,7 @@ jobs:
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
           python3 .github/scripts/apply_audio_responsiveness.py
+          python3 .github/scripts/apply_inotia2_continuous_music.py
       - name: Verify 16 KiB native executable page boundaries
         working-directory: aram-core
         env:
@@ -415,6 +440,13 @@ jobs:
         env:
           GOWORK: off
         run: go test ./runtime -run "TestSMAF(Block|FrameSmoothingPreservesPCM|ProbeEndMatchesRender)" -count=1
+      - name: ARM64 continuous music and restore regressions
+        working-directory: aram-core
+        env:
+          GOWORK: off
+        run: |
+          go test ./runtime -run '^TestContinuousMusic' -count=1
+          go test ./application -run '^TestInotia2ContinuousMusic' -count=1
       - name: Native ARM and Thumb CPU regressions
         working-directory: aram-core
         env:
