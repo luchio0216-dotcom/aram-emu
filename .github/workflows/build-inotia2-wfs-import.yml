@@ -1,4 +1,4 @@
-name: Inotia2 combat stability with input and save compatibility
+name: Inotia2 discard-aware automatic pickup with combat stability
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: inotia2-combat-stability-apk-${{ github.ref }}
+  group: inotia2-discard-pickup-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -96,6 +96,8 @@ jobs:
             ../aram-core/application/machine_load.go \
             ../aram-core/application/inotia2_autoloot.go \
             ../aram-core/application/inotia2_autoloot_test.go \
+            ../aram-core/application/inotia2_discard_test.go \
+            ../aram-core/application/inotia2_discard_native_test.go \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
@@ -113,7 +115,7 @@ jobs:
         working-directory: aram-core
         run: go test ./application -run '^TestInotia2(CombatFrame|Frame)' -count=1 -v
 
-      - name: Test automatic pickup scope and capacity notification
+      - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
         run: go test ./application -run 'TestInotia2AutoLoot' -count=1
 
@@ -160,13 +162,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-combat-stability-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-discard-pickup-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-combat-stability-linux-amd64
-          path: aram-emu/dist/aram-inotia2-combat-stability-linux-amd64.tar.gz
+          name: aram-inotia2-discard-pickup-linux-amd64
+          path: aram-emu/dist/aram-inotia2-discard-pickup-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -228,6 +230,8 @@ jobs:
             ../aram-core/application/machine_load.go \
             ../aram-core/application/inotia2_autoloot.go \
             ../aram-core/application/inotia2_autoloot_test.go \
+            ../aram-core/application/inotia2_discard_test.go \
+            ../aram-core/application/inotia2_discard_native_test.go \
             ../aram-core/application/internal/ktf/ktf_scheduler.go \
             ../aram-core/application/internal/ktf/ktf_clet_input_test.go \
             ../aram-core/application/internal/ktf/ktf_wipic_kernel.go \
@@ -256,7 +260,7 @@ jobs:
         working-directory: aram-core
         run: go test ./application -run '^TestInotia2(CombatFrame|Frame)' -count=1 -v
 
-      - name: Test automatic pickup scope and capacity notification
+      - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
         run: go test ./application -run 'TestInotia2AutoLoot' -count=1
 
@@ -298,7 +302,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2CombatStability-${GITHUB_SHA::7}"
+          build_version="Inotia2DiscardPickup-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -315,6 +319,7 @@ jobs:
             echo "inotia2-input-fix=all-key-held-edges"
             echo "mobile-call-button=send,custom-layout-safe"
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
+            echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
@@ -326,19 +331,19 @@ jobs:
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1007"
+          ARAM_VERSION_CODE: "1008"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-combat-stability-android.apk
+          cp "${apk}" dist/aram-inotia2-discard-pickup-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-combat-stability-android.apk
+          apk=dist/aram-inotia2-discard-pickup-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
@@ -350,8 +355,8 @@ jobs:
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-combat-stability-android
-          path: aram-emu/dist/aram-inotia2-combat-stability-android.apk
+          name: aram-inotia2-discard-pickup-android
+          path: aram-emu/dist/aram-inotia2-discard-pickup-android.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -376,6 +381,7 @@ jobs:
       - name: Apply native executable memory page fix
         working-directory: aram-emu
         run: |
+          python3 .github/scripts/apply_inotia2_autoloot.py
           python3 .github/scripts/apply_android_native_pages.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
@@ -388,7 +394,7 @@ jobs:
         working-directory: aram-core
         env:
           GOWORK: off
-        run: go test ./application -run '^TestInotia2(CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoLoot|CombatFrame|Frame)' -count=1 -v
       - name: Native ARM and Thumb CPU regressions
         working-directory: aram-core
         env:
