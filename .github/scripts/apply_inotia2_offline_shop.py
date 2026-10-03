@@ -13,7 +13,7 @@ definition = (ROOT / ".github/patches/inotia2_offline_shop.go").read_text()
 emitted = [
     (int(address, 16), bytes.fromhex(data))
     for address, data in re.findall(
-        r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)',
+        r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", legacySHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)',
         definition,
     )
 ]
@@ -38,12 +38,12 @@ for name in (
     "inotia2_offline_shop_native_test.go",
 ):
     (CORE / name).write_text((ROOT / ".github/patches" / name).read_text())
-print("Installed exact-client local gold shop; v1008 timing and save identity preserved")
+print("Installed guarded 24-product local gold shop; v1008 timing and v1012 states preserved")
 
 state = CORE / "state.go"
 source = state.read_text()
 old_state = "\tcopy(m.frame.Pix, parsed.frame)\n"
-new_state = """\t// Full states from the v1008 baseline also receive the title-scoped shop.
+new_state = """\t// Full states from v1008 and v1012 receive the current title-scoped shop.
 \tif err := installInotia2OfflineShop(m.initialText, m.cpu); err != nil {
 \t\treturn err
 \t}

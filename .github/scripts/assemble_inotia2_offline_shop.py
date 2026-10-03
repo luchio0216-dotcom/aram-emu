@@ -35,12 +35,19 @@ class Asm:
 
 FLAG=0x2ad400
 CATALOG=[(857,10000),(665,10000),(835,5000),(836,10000),(839,10000)]+[(i,20000) for i in range(943,948)]+[(949,20000)]
-ENTRY=0x2ae200;INIT=0x2ae240;PRICE=0x2ae500;CLEANUP=0x2ae580;TRIGGER=0x2ae600;TABLE=0x2ae680;TITLE=0x2ae700
+# Retain the original eleven in order, then append a curated premium-oriented
+# selection. Equipment requirements and native pack contents remain unchanged.
+CATALOG += [(941,50000),(940,50000),(950,30000),(951,30000),
+            (647,5000),(837,10000),(838,10000),(4,30000),
+            (933,50000),(934,100000),(935,30000),(936,30000),(880,10000)]
+ENTRY=0x2ae200;INIT=0x2ae240;PRICE=0x2ae500;CLEANUP=0x2ae580;TABLE=0x2ae680;TITLE=0x2ae780
 
 def jump(to):return bytes.fromhex('004b1847')+struct.pack('<I',to|1)
 def bl(at,to):a=Asm(at);a.bl(to);return bytes(a.b)
 
 def build():
+ assert len(CATALOG) == 24 and len({i for i,_ in CATALOG}) == len(CATALOG)
+ assert TABLE + len(CATALOG)*8 <= TITLE < 0x2af000
  patches=[]
  a=Asm(ENTRY);a.h(0xb510);a.ldr(4,FLAG);a.mov(0,1);a.store(0,4);a.mov(0,16);a.bl(0x176fd8);a.h(0xbd10)
  patches.append((ENTRY,a.finish()))

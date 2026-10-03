@@ -58,13 +58,33 @@ func TestInotia2OfflineShopInstallationGuards(t *testing.T) {
   if err := installInotia2OfflineShopPatches(b, []inotia2OfflineShopPatch{p, q}); err == nil {
    t.Fatal("mixed partial installation accepted")
   }
+  // Restoring a complete previous catalog upgrades it atomically. A partly
+  // upgraded state must not change any earlier span.
+  legacy := []byte("oldbuild")
+  p.legacySHA = fmt.Sprintf("%x", sha256.Sum256(legacy)); q.legacySHA = p.legacySHA
+  discardWrite(t, b, p.address, legacy); discardWrite(t, b, q.address, legacy)
+  if err := installInotia2OfflineShopPatches(b, []inotia2OfflineShopPatch{p, q}); err != nil {
+   t.Fatal("complete legacy catalog rejected", err)
+  }
+  if err := installInotia2OfflineShopPatches(b, []inotia2OfflineShopPatch{p, q}); err != nil {
+   t.Fatal("upgraded catalog not idempotent", err)
+  }
+  discardWrite(t, b, p.address, legacy)
+  if err := installInotia2OfflineShopPatches(b, []inotia2OfflineShopPatch{p, q}); err == nil {
+   t.Fatal("partial legacy upgrade accepted")
+  }
+  _ = b.ReadMemory(p.address, got)
+  if !bytes.Equal(got, legacy) { t.Fatal("legacy span changed before complete validation") }
  })
 }
 
 func TestInotia2OfflineShopPricesAndMerchantFallback(t *testing.T) {
  for _, tc := range []struct{name string; active, item, want uint32}{
   {"blessed seal", 1, 857, 10000}, {"gem", 1, 835, 5000},
-  {"elixir", 1, 943, 20000}, {"last product", 1, 949, 20000},
+  {"elixir", 1, 943, 20000}, {"original last product", 1, 949, 20000},
+  {"equipment", 1, 941, 50000}, {"revival scroll", 1, 647, 5000},
+  {"bag", 1, 4, 30000}, {"native pack", 1, 933, 50000},
+  {"epic pack", 1, 934, 100000}, {"last product", 1, 880, 10000},
   {"ordinary merchant", 0, 857, 0x210007},
   {"noncatalog merchant stock", 1, 32, 0x210007},
  } {
@@ -131,11 +151,12 @@ func TestInotia2OfflineShopStockInitialization(t *testing.T) {
      if discardRead(t, b, 0x215000) != 0 { t.Fatal("ordinary merchant initialization intercepted") }
     } else {
      if discardRead(t, b, 0x215000) != 0x210000 { t.Fatal("shop widget not installed") }
-     for index, id := range []uint32{857,665,835,836,839,943,944,945,946,947,949} {
+     for index, id := range []uint32{857,665,835,836,839,943,944,945,946,947,949,
+      941,940,950,951,647,837,838,4,933,934,935,936,880} {
       if got := discardRead(t, b, 0x220000+uint32(index)*4); got != id { t.Fatalf("stock %d = %d, want %d", index, got, id) }
      }
      var widget [40]byte; if err := b.ReadMemory(0x210000, widget[:]); err != nil { t.Fatal(err) }
-     if widget[1] != 6 || widget[3] != 6 || widget[4] != 4 || widget[11] != 0 || widget[12] != 11 {
+     if widget[1] != 6 || widget[3] != 6 || widget[4] != 4 || widget[11] != 0 || widget[12] != 24 {
       t.Fatalf("wrong stock widget geometry: %v", widget[:16])
      }
      if discardRead(t, b, inotia2OfflineShopFlag+12) != 3 || discardRead(t, b, 0x215010) != 1 {

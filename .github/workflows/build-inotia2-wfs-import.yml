@@ -1,4 +1,4 @@
-name: Inotia2 v1008 local gold shop APK (install version 1012)
+name: Inotia2 v1008 local gold shop APK (install version 1013)
 
 on:
   push:
@@ -333,7 +333,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "runtime-baseline=v1008,installation-version=1012,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1013,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -342,18 +342,18 @@ jobs:
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
             echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
-            echo "inotia2-offline-shop=11-local-products,gold-only,native-transaction,exact-client-guard"
+            echo "inotia2-offline-shop=24-local-products,gold-only,native-transaction,exact-client-guard"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-local-shop-1012-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-local-shop-1013-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1012"
+          ARAM_VERSION_CODE: "1013"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
@@ -371,7 +371,7 @@ jobs:
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
-          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=11-local-products,gold-only,native-transaction,exact-client-guard"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=24-local-products,gold-only,native-transaction,exact-client-guard"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 
