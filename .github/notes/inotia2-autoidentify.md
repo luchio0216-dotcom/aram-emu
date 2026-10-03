@@ -39,3 +39,13 @@ stack/callee preservation, title gating, idempotence and atomic validation.
 Private replay with authorized game/save data checks native purchase and field
 pickup identification, option/UID preservation and failed-capacity behavior.
 Game files, saves, dumps and screenshots never enter source or public CI.
+
+Release verification for code commit 742f5e2 completed in required workflow
+37114683538: Linux, Android and ARM64 jobs all passed. Private replay with the
+compiled release verified automatic field pickup, local and ordinary merchant
+prices/purchases, identification, unchanged stock and generated option values,
+unchanged UID on pickup, untouched consumable quantities, full-capacity ground
+and merchant failure, v1008/v1012/v1013 state loading, and lossless WFS import
+and reopening. The APK's Nightly certificate, versionCode 1014, signed payload
+entries and 16 KiB native library alignment were verified. Fold7 on-device
+behavior remains user-tested.
