@@ -1,4 +1,4 @@
-name: Inotia2 v1008 rollback update APK (install version 1011)
+name: Inotia2 v1008 local gold shop APK (install version 1012)
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: inotia2-v1008-rollback-apk-${{ github.ref }}
+  group: inotia2-local-gold-shop-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -29,6 +29,12 @@ jobs:
         with:
           ref: ${{ env.EMU_REF }}
           path: aram-emu
+          persist-credentials: false
+
+      - name: Check out local shop compatibility overlay
+        uses: actions/checkout@v6
+        with:
+          path: aram-compat
           persist-credentials: false
 
       - name: Check out core
@@ -86,6 +92,8 @@ jobs:
           python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
+          python3 ../aram-compat/.github/scripts/apply_inotia2_offline_shop.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -115,7 +123,7 @@ jobs:
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
-        run: go test ./application -run '^TestInotia2(CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(OfflineShop|CombatFrame|Frame)' -count=1 -v
 
       - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
@@ -164,13 +172,13 @@ jobs:
           cp -a /usr/share/X11/xkb dist/package/display/share/
           go version > dist/package/GO-VERSION.txt
           go list -m -json all > dist/package/dependencies.json
-          tar -C dist/package -czf dist/aram-inotia2-v1008-rollback-linux-amd64.tar.gz .
+          tar -C dist/package -czf dist/aram-inotia2-local-shop-linux-amd64.tar.gz .
 
       - name: Upload Linux validation build
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-v1008-rollback-linux-amd64
-          path: aram-emu/dist/aram-inotia2-v1008-rollback-linux-amd64.tar.gz
+          name: aram-inotia2-local-shop-linux-amd64
+          path: aram-emu/dist/aram-inotia2-local-shop-linux-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -183,6 +191,12 @@ jobs:
         with:
           ref: ${{ env.EMU_REF }}
           path: aram-emu
+          persist-credentials: false
+
+      - name: Check out local shop compatibility overlay
+        uses: actions/checkout@v6
+        with:
+          path: aram-compat
           persist-credentials: false
 
       - name: Check out core
@@ -221,6 +235,8 @@ jobs:
           python3 .github/scripts/apply_audio_frame_smoothing.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
+          python3 ../aram-compat/.github/scripts/apply_inotia2_offline_shop.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -261,7 +277,7 @@ jobs:
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
-        run: go test ./application -run '^TestInotia2(CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(OfflineShop|CombatFrame|Frame)' -count=1 -v
 
       - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
@@ -305,7 +321,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2DiscardPickup-${EMU_REF::7}"
+          build_version="Inotia2LocalShop-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -317,7 +333,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "rollback-behavior=v1008,installation-version=1011,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1012,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -326,42 +342,44 @@ jobs:
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
             echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
+            echo "inotia2-offline-shop=11-local-products,gold-only,native-transaction,exact-client-guard"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-rollback-1011-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-local-shop-1012-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1011"
+          ARAM_VERSION_CODE: "1012"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
           apk="android/app/build/outputs/apk/github/debug/app-github-debug.apk"
           test -s "${apk}"
           mkdir -p dist
-          cp "${apk}" dist/aram-inotia2-v1008-rollback-android.apk
+          cp "${apk}" dist/aram-inotia2-local-shop-android.apk
 
       - name: Verify compatibility APK payload
         working-directory: aram-emu
         run: |
-          apk=dist/aram-inotia2-v1008-rollback-android.apk
+          apk=dist/aram-inotia2-local-shop-android.apk
           test "$(unzip -Z1 "${apk}" | grep -c '/libgojni.so$')" -eq 2
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia1-direction-fix=core-clet-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=11-local-products,gold-only,native-transaction,exact-client-guard"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 
       - name: Upload compatibility Android APK
         uses: actions/upload-artifact@v7
         with:
-          name: aram-inotia2-v1008-rollback-android
-          path: aram-emu/dist/aram-inotia2-v1008-rollback-android.apk
+          name: aram-inotia2-local-shop-android
+          path: aram-emu/dist/aram-inotia2-local-shop-android.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -373,6 +391,12 @@ jobs:
         with:
           ref: ${{ env.EMU_REF }}
           path: aram-emu
+          persist-credentials: false
+
+      - name: Check out local shop compatibility overlay
+        uses: actions/checkout@v6
+        with:
+          path: aram-compat
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
@@ -391,6 +415,8 @@ jobs:
           python3 .github/scripts/apply_android_native_pages.py
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
+          python3 ../aram-compat/.github/scripts/apply_inotia2_offline_shop.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go
       - name: Verify 16 KiB native executable page boundaries
         working-directory: aram-core
         env:
@@ -400,10 +426,11 @@ jobs:
         working-directory: aram-core
         env:
           GOWORK: off
-        run: go test ./application -run '^TestInotia2(AutoLoot|CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(OfflineShop|AutoLoot|CombatFrame|Frame)' -count=1 -v
       - name: Native ARM and Thumb CPU regressions
         working-directory: aram-core
         env:
           GOWORK: off
         run: go test ./cpu/interpreter ./cpu/conformance -count=1
+
 
