@@ -1,4 +1,4 @@
-name: Inotia2 v1008 local gold shop APK (install version 1013)
+name: Inotia2 v1008 auto-identification APK (install version 1014)
 
 on:
   push:
@@ -93,7 +93,8 @@ jobs:
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_offline_shop.py
-          gofmt -w ../aram-core/application/inotia2_offline_shop*.go
+          python3 ../aram-compat/.github/scripts/apply_inotia2_autoidentify.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -123,7 +124,7 @@ jobs:
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
-        run: go test ./application -run '^TestInotia2(OfflineShop|CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoIdentify|OfflineShop|CombatFrame|Frame)' -count=1 -v
 
       - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
@@ -236,7 +237,8 @@ jobs:
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_offline_shop.py
-          gofmt -w ../aram-core/application/inotia2_offline_shop*.go
+          python3 ../aram-compat/.github/scripts/apply_inotia2_autoidentify.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -277,7 +279,7 @@ jobs:
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
-        run: go test ./application -run '^TestInotia2(OfflineShop|CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoIdentify|OfflineShop|CombatFrame|Frame)' -count=1 -v
 
       - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
@@ -321,7 +323,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2LocalShop-${GITHUB_SHA::7}"
+          build_version="Inotia2AutoIdentify-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -333,7 +335,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "runtime-baseline=v1008,installation-version=1013,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1014,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -343,17 +345,18 @@ jobs:
             echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
             echo "inotia2-offline-shop=24-local-products,gold-only,native-transaction,exact-client-guard"
+            echo "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-local-shop-1013-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-autoidentify-1014-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1013"
+          ARAM_VERSION_CODE: "1014"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
@@ -372,6 +375,7 @@ jobs:
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=24-local-products,gold-only,native-transaction,exact-client-guard"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 
@@ -416,7 +420,8 @@ jobs:
           python3 .github/scripts/apply_inotia2_frame_pacing.py
           python3 .github/scripts/apply_inotia2_combat_stability.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_offline_shop.py
-          gofmt -w ../aram-core/application/inotia2_offline_shop*.go
+          python3 ../aram-compat/.github/scripts/apply_inotia2_autoidentify.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go
       - name: Verify 16 KiB native executable page boundaries
         working-directory: aram-core
         env:
@@ -426,7 +431,7 @@ jobs:
         working-directory: aram-core
         env:
           GOWORK: off
-        run: go test ./application -run '^TestInotia2(OfflineShop|AutoLoot|CombatFrame|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoIdentify|OfflineShop|AutoLoot|CombatFrame|Frame)' -count=1 -v
       - name: Native ARM and Thumb CPU regressions
         working-directory: aram-core
         env:
