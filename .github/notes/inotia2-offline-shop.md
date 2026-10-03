@@ -44,7 +44,9 @@ contents and activation rules; names and server-era prices are not reconstructed
 Use the game's normal merchant controls: choose a product, press OK, choose
 the quantity when offered, then confirm. CLR closes the window. Existing
 item descriptions, item effects and consumable-use rules remain native.
-Network-dependent guild/chat/storage services are not represented as goods.
+No standalone guild/chat/storage service products are added. The native siege
+pack does contain online-only goods such as a guild megaphone; the corresponding
+retired online services are not restored by this shop patch.
 
 The native purchase callback still clones a stock item, checks bag/stack
 capacity, inserts it successfully and only then debits gold. Insufficient
@@ -71,3 +73,10 @@ replay against the user's authorized game/save verified a purchased seal,
 the exact gold debit, insufficient-gold message 6, full-bag message 7 and exit.
 Game packages, private saves, memory dumps and game screenshots stay outside
 the repository and public workflow artifacts.
+
+Private release replay verified all thirteen added products, one-unit quantities
+and each exact gold debit, all four native packs opening into their client-defined
+contents, the 24-entry stock grid, v1008 and v1012 full-state restore/reopen, and
+lossless WFS restore with the existing game ZIP/save hashes. Android APK payload,
+Nightly certificate, installation version 1013 and 16 KiB ELF alignment were
+verified. Required Linux, Android and ARM64 jobs passed for code commit 9d5d904.
