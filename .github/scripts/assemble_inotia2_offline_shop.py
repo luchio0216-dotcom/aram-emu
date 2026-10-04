@@ -40,13 +40,14 @@ CATALOG=[(857,10000),(665,10000),(835,5000),(836,10000),(839,10000)]+[(i,20000) 
 CATALOG += [(941,50000),(940,50000),(950,30000),(951,30000),
             (647,5000),(837,10000),(838,10000),(4,30000),
             (933,50000),(934,100000),(935,30000),(936,30000),(880,10000)]
+CATALOG += [(i,10000) for i in (972,974,970,971,973,975)]
 ENTRY=0x2ae200;INIT=0x2ae240;PRICE=0x2ae500;CLEANUP=0x2ae580;TABLE=0x2ae680;TITLE=0x2ae780
 
 def jump(to):return bytes.fromhex('004b1847')+struct.pack('<I',to|1)
 def bl(at,to):a=Asm(at);a.bl(to);return bytes(a.b)
 
 def build():
- assert len(CATALOG) == 24 and len({i for i,_ in CATALOG}) == len(CATALOG)
+ assert len(CATALOG) == 30 and len({i for i,_ in CATALOG}) == len(CATALOG)
  assert TABLE + len(CATALOG)*8 <= TITLE < 0x2af000
  patches=[]
  a=Asm(ENTRY);a.h(0xb510);a.ldr(4,FLAG);a.mov(0,1);a.store(0,4);a.mov(0,16);a.bl(0x176fd8);a.h(0xbd10)
@@ -63,7 +64,7 @@ def build():
  a.ldr(5,0x1924c4)
  a.ldr(3,0x1924c4+0x1048);a.load(3,3);a.byte(0,3,load=True);a.ldr(2,FLAG+12);a.store(0,2);a.mov(0,1);a.byte(0,3)
  a.mov(0,0);a.store(0,4,16)
- for off,val in [(1,6),(12,len(CATALOG)),(7,20),(8,20),(4,4),(2,4),(3,6),(11,0)]:a.mov(0,val);a.byte(0,4,off)
+ for off,val in [(1,6),(12,len(CATALOG)),(7,20),(8,20),(4,5),(2,5),(3,6),(11,0)]:a.mov(0,val);a.byte(0,4,off)
  for off,slot in [(28,0x5b4),(32,0x5b8),(36,0x1064)]:a.ldr(3,0x1924c4+slot);a.load(3,3);a.store(3,4,off)
  a.ldr(3,0x1924c4+0x598);a.load(3,3);a.store(4,3)
  a.mov(0,0);a.bl(0x11fc90);a.reg(0,4);a.mov(1,0);a.bl(0x167ef0);a.reg(1,0)
