@@ -1,4 +1,4 @@
-name: Inotia2 inventory swap APK (install version 1019)
+name: Inotia2 category gold shop APK (install version 1020)
 
 on:
   push:
@@ -331,7 +331,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2InventorySwap-${GITHUB_SHA::7}"
+          build_version="Inotia2CategoryShop-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -343,7 +343,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "runtime-baseline=v1008,installation-version=1019,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1020,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -352,7 +352,7 @@ jobs:
             echo "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
             echo "inotia2-discard-pickup=inventory-drop-blocked-until-leaving-native-radius,slot-swap-safe,manual-ok-preserved"
             echo "inotia2-performance=empty-ground-fast-path,bss-pickup-flag,host-page-aligned-native-jit,smaf-frame-smoothing,combat-frame-headroom,one-lcd-frame-per-quantum"
-            echo "inotia2-offline-shop=30-local-products,gold-only,native-transaction,exact-client-guard"
+            echo "inotia2-offline-shop=four-categories,248-local-products,221-unique-epic-equipment,level-order,one-gold-equipment,chaos-dice,4-visible-rows,native-scrollbar,native-transaction,exact-client-guard"
             echo "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
             echo "inotia2-combat-targets=missing-current-index-selects-best,no-invalid-threat-table-read"
             echo "inotia2-combat-geometry=equivalent-signed16-intersection,exact-client-guard,no-frame-poll"
@@ -365,12 +365,12 @@ jobs:
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-inventoryswap-1019-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-categoryshop-1020-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1019"
+          ARAM_VERSION_CODE: "1020"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
@@ -388,7 +388,7 @@ jobs:
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-input-fix=all-key-held-edges"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "mobile-call-button=send,custom-layout-safe"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
-          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=30-local-products,gold-only,native-transaction,exact-client-guard"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=four-categories,248-local-products,221-unique-epic-equipment,level-order,one-gold-equipment,chaos-dice,4-visible-rows,native-scrollbar,native-transaction,exact-client-guard"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-monster-experience=level-41-plus,4x-final-reward,quest-rewards-unchanged,no-frame-poll"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-class-skillbooks=six-native-item-ids,class-only-random,native-capacity,save-persistent,original-seal-unchanged"

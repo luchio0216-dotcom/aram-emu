@@ -10,6 +10,11 @@ import (
 )
 
 func skillBooksTestCode(t *testing.T, b cpu.Backend) {
+	for _, p := range inotia2OfflineShopPatches {
+		if p.address == 0x2adf10 {
+			discardWrite(t, b, p.address, p.replacement)
+		}
+	}
 	for _, p := range inotia2SkillBooksPatches {
 		discardWrite(t, b, p.address, p.replacement)
 	}

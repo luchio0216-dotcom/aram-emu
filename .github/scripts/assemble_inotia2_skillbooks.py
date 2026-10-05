@@ -60,8 +60,8 @@ def build():
  a.h(0xb570);a.ldr(4,0x1924c4);a.h(0x0609);a.ldr(3,0x148ca5);a.h(0x4718)
  code=a.finish();assert NAME+len(code)<=STRING;patches.append((NAME,code))
  a=Asm(STRING);a.ldr(3,60000);sub(a,2,0,3);a.cmp(2,5);a.cond(8,'original');a.h(0x0092);a.ldr(3,TEXT_TABLE);a.h(0x5898);a.h(0x4770)
- a.label('original');a.h(0xb500);a.ldr(2,0x1924c4);a.ldr(3,0x1760);a.ldr(1,0x14fd15);a.h(0x4708)
- code=a.finish();assert STRING+len(code)<=TEXT_TABLE;patches.append((STRING,code))
+ a.label('original');a.ldr(1,0x2adf11);a.h(0x4708)
+ code=a.finish();code=code+bytes(TEXT_TABLE-STRING-len(code));assert STRING+len(code)<=TEXT_TABLE;patches.append((STRING,code))
  texts=[f'봉인된 스킬북({c})' for c in CLASSES]+[f'사용하면 {c}의 스킬북 하나를 무작위로 얻습니다.' for c in CLASSES]
  data=bytearray();pointers=[]
  for t in texts:pointers.append(TEXT+len(data));data+=t.encode('cp949')+b'\0'
@@ -80,3 +80,4 @@ def build():
 
 if __name__=='__main__':
  for a,b in build():print(hex(a),len(b),b.hex())
+

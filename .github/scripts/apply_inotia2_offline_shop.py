@@ -13,7 +13,7 @@ definition = (ROOT / ".github/patches/inotia2_offline_shop.go").read_text()
 emitted = [
     (int(address, 16), bytes.fromhex(data))
     for address, data in re.findall(
-        r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", legacySHA: "[0-9a-f]+", previousSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)',
+        r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", legacySHA: "[0-9a-f]+", previousSHA: "[0-9a-f]+", recentSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)',
         definition,
     )
 ]
@@ -28,7 +28,7 @@ new = """\tif err := backend.WriteMemory(inotia2DiscardHelperAddress, inotia2Dis
 \t}
 \treturn installInotia2OfflineShop(client, backend)
 """
-if new not in source:
+if "installInotia2OfflineShop(client, backend)" not in source:
     if source.count(old) != 1:
         raise SystemExit("v1008 helper installation baseline does not match")
     owner.write_text(source.replace(old, new, 1))
@@ -38,7 +38,7 @@ for name in (
     "inotia2_offline_shop_native_test.go",
 ):
     (CORE / name).write_text((ROOT / ".github/patches" / name).read_text())
-print("Installed guarded 30-product local gold shop; v1008 timing and v1012 states preserved")
+print("Installed guarded four-category 248-product local gold shop; native transactions and v1019 state compatibility retained")
 
 state = CORE / "state.go"
 source = state.read_text()
@@ -48,7 +48,8 @@ new_state = """\t// Full states from v1008 and v1012 receive the current title-s
 \t\treturn err
 \t}
 """ + old_state
-if new_state not in source:
+if "installInotia2OfflineShop(m.initialText, m.cpu)" not in source:
     if source.count(old_state) != 1:
         raise SystemExit("Full-state restore baseline does not match")
     state.write_text(source.replace(old_state, new_state, 1))
+

@@ -34,57 +34,361 @@ class Asm:
   return bytes(self.b)
 
 FLAG=0x2ad400
-CATALOG=[(857,10000),(665,10000),(835,5000),(836,10000),(839,10000)]+[(i,20000) for i in range(943,948)]+[(949,20000)]
-# Retain the original eleven in order, then append a curated premium-oriented
-# selection. Equipment requirements and native pack contents remain unchanged.
-CATALOG += [(941,50000),(940,50000),(950,30000),(951,30000),
-            (647,5000),(837,10000),(838,10000),(4,30000),
-            (933,50000),(934,100000),(935,30000),(936,30000),(880,10000)]
-CATALOG += [(i,10000) for i in (972,974,970,971,973,975)]
-ENTRY=0x2ae200;INIT=0x2ae240;PRICE=0x2ae500;CLEANUP=0x2ae580;TABLE=0x2ae680;TITLE=0x2ae780
+ENTRY=0x2ae200;INIT=0x2ae240;PRICE=0x2ae500;CLEANUP=0x2ae580;TITLE=0x2ae780
+TABLE=0x2ad500
+BUILD_STOCK=0x2ad8e0;CLEAR_STOCK=0x2ada60;NAVIGATE=0x2adb00;SCROLL=0x2adb80;RESOLVE=0x2adc20
+CATEGORIES=0x2add10;MENU_INIT=0x2add50;MENU_INPUT=0x2ade20;MENU_NAMES=0x2adf10;MENU_TEXT=0x2adf80;MENU_ITEMS=0x2adf60
+SELECT_R5=0x2adc80;SELECT_R0=0x2adcb0;SELECT_R6=0x2adce0
+# Numeric equipment references, ordered by category, required level, subtype,
+# and ID. Definitions, names, icons, options and restrictions come from the
+# user's guarded game image. No extracted game files are embedded.
+EQUIPMENT=(
+ (725, 0, 25, 1),
+ (504, 0, 27, 0),
+ (938, 0, 27, 1),
+ (503, 0, 27, 8),
+ (505, 0, 27, 10),
+ (937, 0, 27, 11),
+ (922, 0, 30, 0),
+ (760, 0, 30, 12),
+ (579, 0, 33, 1),
+ (580, 0, 33, 1),
+ (745, 0, 35, 7),
+ (668, 0, 40, 1),
+ (923, 0, 40, 9),
+ (755, 0, 40, 10),
+ (939, 0, 40, 10),
+ (940, 0, 40, 11),
+ (733, 0, 45, 3),
+ (721, 0, 50, 0),
+ (924, 0, 50, 11),
+ (737, 0, 55, 4),
+ (925, 0, 56, 7),
+ (741, 0, 60, 5),
+ (749, 0, 65, 8),
+ (726, 0, 70, 1),
+ (926, 0, 70, 6),
+ (730, 0, 75, 2),
+ (742, 0, 80, 5),
+ (752, 0, 85, 9),
+ (727, 0, 90, 1),
+ (927, 0, 95, 4),
+ (928, 0, 98, 1),
+ (929, 0, 98, 10),
+ (930, 0, 98, 12),
+ (722, 0, 100, 0),
+ (723, 0, 100, 0),
+ (724, 0, 100, 0),
+ (728, 0, 100, 1),
+ (729, 0, 100, 1),
+ (941, 0, 100, 1),
+ (731, 0, 100, 2),
+ (732, 0, 100, 2),
+ (734, 0, 100, 3),
+ (735, 0, 100, 3),
+ (736, 0, 100, 3),
+ (738, 0, 100, 4),
+ (739, 0, 100, 4),
+ (740, 0, 100, 4),
+ (743, 0, 100, 6),
+ (744, 0, 100, 6),
+ (746, 0, 100, 7),
+ (747, 0, 100, 7),
+ (748, 0, 100, 7),
+ (750, 0, 100, 8),
+ (751, 0, 100, 8),
+ (753, 0, 100, 9),
+ (754, 0, 100, 9),
+ (756, 0, 100, 10),
+ (757, 0, 100, 11),
+ (758, 0, 100, 11),
+ (759, 0, 100, 11),
+ (761, 0, 100, 12),
+ (762, 0, 100, 12),
+ (954, 0, 110, 0),
+ (953, 0, 110, 1),
+ (952, 0, 110, 7),
+ (956, 0, 110, 9),
+ (957, 0, 110, 10),
+ (955, 0, 110, 11),
+ (948, 1, 1, 17),
+ (950, 1, 1, 17),
+ (951, 1, 1, 18),
+ (763, 1, 20, 21),
+ (771, 1, 25, 13),
+ (703, 1, 28, 17),
+ (881, 1, 30, 13),
+ (776, 1, 30, 14),
+ (903, 1, 30, 19),
+ (691, 1, 32, 17),
+ (521, 1, 33, 14),
+ (713, 1, 33, 18),
+ (887, 1, 35, 14),
+ (781, 1, 35, 15),
+ (670, 1, 35, 18),
+ (699, 1, 37, 18),
+ (892, 1, 38, 15),
+ (704, 1, 38, 17),
+ (907, 1, 38, 20),
+ (786, 1, 40, 16),
+ (898, 1, 40, 16),
+ (684, 1, 40, 17),
+ (671, 1, 40, 18),
+ (882, 1, 42, 13),
+ (692, 1, 42, 17),
+ (791, 1, 44, 19),
+ (888, 1, 45, 14),
+ (672, 1, 45, 18),
+ (705, 1, 48, 17),
+ (796, 1, 48, 20),
+ (893, 1, 50, 15),
+ (685, 1, 50, 17),
+ (673, 1, 50, 18),
+ (919, 1, 50, 21),
+ (693, 1, 52, 17),
+ (899, 1, 53, 16),
+ (714, 1, 53, 18),
+ (904, 1, 53, 19),
+ (883, 1, 54, 13),
+ (908, 1, 54, 20),
+ (674, 1, 55, 18),
+ (889, 1, 56, 14),
+ (700, 1, 57, 18),
+ (894, 1, 58, 15),
+ (706, 1, 58, 17),
+ (675, 1, 60, 17),
+ (686, 1, 60, 17),
+ (767, 1, 60, 22),
+ (694, 1, 62, 17),
+ (772, 1, 64, 13),
+ (900, 1, 65, 16),
+ (676, 1, 65, 17),
+ (921, 1, 65, 22),
+ (777, 1, 68, 14),
+ (707, 1, 68, 17),
+ (884, 1, 70, 13),
+ (677, 1, 70, 17),
+ (687, 1, 70, 17),
+ (905, 1, 70, 19),
+ (782, 1, 72, 15),
+ (695, 1, 72, 17),
+ (715, 1, 73, 18),
+ (678, 1, 75, 17),
+ (787, 1, 76, 16),
+ (701, 1, 77, 18),
+ (708, 1, 78, 17),
+ (890, 1, 80, 14),
+ (679, 1, 80, 17),
+ (688, 1, 80, 18),
+ (792, 1, 80, 19),
+ (909, 1, 80, 20),
+ (696, 1, 82, 17),
+ (797, 1, 84, 20),
+ (895, 1, 85, 15),
+ (680, 1, 85, 17),
+ (709, 1, 88, 17),
+ (901, 1, 90, 16),
+ (689, 1, 90, 17),
+ (681, 1, 90, 18),
+ (697, 1, 92, 18),
+ (716, 1, 93, 18),
+ (885, 1, 95, 13),
+ (896, 1, 95, 15),
+ (682, 1, 95, 17),
+ (886, 1, 98, 13),
+ (891, 1, 98, 14),
+ (897, 1, 98, 15),
+ (902, 1, 98, 16),
+ (710, 1, 98, 17),
+ (906, 1, 98, 19),
+ (910, 1, 98, 20),
+ (920, 1, 98, 21),
+ (773, 1, 100, 13),
+ (774, 1, 100, 13),
+ (775, 1, 100, 13),
+ (829, 1, 100, 13),
+ (778, 1, 100, 14),
+ (779, 1, 100, 14),
+ (780, 1, 100, 14),
+ (783, 1, 100, 15),
+ (784, 1, 100, 15),
+ (785, 1, 100, 15),
+ (788, 1, 100, 16),
+ (789, 1, 100, 16),
+ (790, 1, 100, 16),
+ (711, 1, 100, 17),
+ (712, 1, 100, 17),
+ (683, 1, 100, 18),
+ (690, 1, 100, 18),
+ (698, 1, 100, 18),
+ (702, 1, 100, 18),
+ (717, 1, 100, 18),
+ (718, 1, 100, 18),
+ (793, 1, 100, 19),
+ (794, 1, 100, 19),
+ (795, 1, 100, 19),
+ (798, 1, 100, 20),
+ (799, 1, 100, 20),
+ (800, 1, 100, 20),
+ (764, 1, 100, 21),
+ (765, 1, 100, 21),
+ (766, 1, 100, 21),
+ (768, 1, 100, 22),
+ (769, 1, 100, 22),
+ (770, 1, 100, 22),
+ (963, 1, 105, 19),
+ (962, 1, 105, 20),
+ (966, 1, 105, 21),
+ (958, 1, 110, 13),
+ (959, 1, 110, 14),
+ (960, 1, 110, 15),
+ (961, 1, 110, 16),
+ (590, 2, 40, 23),
+ (911, 2, 42, 23),
+ (915, 2, 45, 24),
+ (801, 2, 52, 23),
+ (912, 2, 56, 23),
+ (806, 2, 56, 24),
+ (916, 2, 58, 24),
+ (913, 2, 85, 23),
+ (802, 2, 88, 23),
+ (917, 2, 90, 24),
+ (807, 2, 92, 24),
+ (914, 2, 98, 23),
+ (918, 2, 98, 24),
+ (803, 2, 100, 23),
+ (804, 2, 100, 23),
+ (805, 2, 100, 23),
+ (808, 2, 100, 24),
+ (809, 2, 100, 24),
+ (810, 2, 100, 24),
+ (964, 2, 105, 23),
+ (965, 2, 105, 24),
+)
+CONSUMABLES=[(857,10000),(665,10000),(835,5000),(836,10000),(839,10000)]+[(i,20000) for i in range(943,948)]+[(949,20000)]
+CONSUMABLES += [(647,5000),(837,10000),(838,10000),(4,30000),(933,50000),(934,100000),(935,30000),(936,30000),(880,10000)]
+CONSUMABLES += [(812,10000)]
+CONSUMABLES += [(i,10000) for i in (972,974,970,971,973,975)]
+CATALOG=[(i,10000) for i,_,_,_ in EQUIPMENT]+CONSUMABLES
+ROWS=(len(CATALOG)+5)//6
 
 def jump(to):return bytes.fromhex('004b1847')+struct.pack('<I',to|1)
 def bl(at,to):a=Asm(at);a.bl(to);return bytes(a.b)
+def cmpreg(a,n,m):a.h(0x4280|(m<<3)|n)
+def subreg(a,d,n,m):a.h(0x1a00|(m<<6)|(n<<3)|d)
+def padded(data,length):assert len(data)<=length;return data+bytes(length-len(data))
 
 def build():
- assert len(CATALOG) == 30 and len({i for i,_ in CATALOG}) == len(CATALOG)
- assert TABLE + len(CATALOG)*8 <= TITLE < 0x2af000
+ assert len(CATALOG)==248 and len({i for i,_ in CATALOG})==248
+ assert TABLE+len(CATALOG)*4 <= BUILD_STOCK
+ assert EQUIPMENT==tuple(sorted(EQUIPMENT,key=lambda x:(x[1],x[2],x[3],x[0])))
  patches=[]
- a=Asm(ENTRY);a.h(0xb510);a.ldr(4,FLAG);a.mov(0,1);a.store(0,4);a.mov(0,16);a.bl(0x176fd8);a.h(0xbd10)
+ a=Asm(ENTRY);a.h(0xb510);a.ldr(4,FLAG);a.mov(0,1);a.store(0,4);a.mov(0,1);a.store(0,4,8);a.mov(0,16);a.bl(0x176fd8);a.h(0xbd10)
  patches.append((ENTRY,a.finish()))
- a=Asm(INIT)
- # Preserve the original prologue on both paths; r8/r10 are native callee saved.
- a.h(0xb570);a.reg(6,10);a.reg(5,8);a.h(0xb460)
- a.ldr(3,FLAG);a.load(3,3);a.cmp(3,0);a.cond(1,'local')
- a.ldr(3,0x1205b1);a.h(0x4718)
- a.label('local');a.bl(0x167e10);a.bl(0x16816c);a.reg(4,0);a.cmp(4,0);a.cond(0,'done')
- a.bl(0x13f8a4);a.ldr(5,TABLE);a.mov(6,0)
- a.label('items');a.h(0x8828);a.bl(0x14a0bc);a.cmp(0,0);a.cond(0,'next');a.reg(1,6);a.bl(0x13f6b0)
- a.label('next');a.add(5,8);a.add(6,1);a.cmp(6,len(CATALOG));a.cond(3,'items')
- a.ldr(5,0x1924c4)
- a.ldr(3,0x1924c4+0x1048);a.load(3,3);a.byte(0,3,load=True);a.ldr(2,FLAG+12);a.store(0,2);a.mov(0,1);a.byte(0,3)
+ # Preserve the displaced merchant prologue and its normal branch. An
+ # expanded stock list is allocated once, cleared on exit and reused.
+ a=Asm(BUILD_STOCK);a.h(0xb570);a.reg(6,10);a.reg(5,8);a.h(0xb460)
+ a.ldr(3,FLAG);a.load(3,3);a.cmp(3,0);a.cond(1,'local');a.ldr(3,0x1205b1);a.h(0x4718)
+ a.label('local');a.ldr(3,FLAG+8);a.load(3,3);a.cmp(3,0);a.cond(0,'products');a.bl(MENU_INIT);a.branch('done');a.label('products');a.h(0xb480);a.bl(0x167e10);a.bl(0x16816c);a.reg(4,0);a.cmp(4,0);a.cond(0,'failed')
+ a.ldr(3,FLAG+20);a.load(7,3);a.cmp(7,0);a.cond(1,'allocated')
+ a.ldr(0,len(CATALOG)*8);a.bl(0x125c54);a.reg(7,0);a.cmp(7,0);a.cond(0,'release');a.ldr(3,FLAG+20);a.store(7,3)
+ a.label('allocated');a.bl(0x13f8a4);a.ldr(3,0x1934f4);a.load(0,3);a.ldr(2,FLAG+16);a.store(0,2);a.store(7,3)
+ a.ldr(3,FLAG+4);a.load(0,3);a.cmp(0,3);a.cond(9,'category');a.mov(0,0);a.label('category');a.h(0x0043);a.h(0x181b);a.h(0x009b);a.ldr(2,CATEGORIES);a.h(0x189b);a.load(5,3);a.load(0,3,4);a.ldr(2,FLAG+32);a.store(0,2);a.load(0,3,8);a.store(0,2,4);a.mov(6,0)
+ a.label('items');a.half(0,5,load=True);a.bl(0x14a0bc);a.store(0,7,4);a.cmp(0,0);a.cond(0,'missing');a.mov(0,0);a.branch('slot');a.label('missing');a.mov(0,1)
+ a.label('slot');a.store(0,7);a.add(7,8);a.add(5,4);a.add(6,1);a.ldr(3,FLAG+32);a.load(0,3);cmpreg(a,6,0);a.cond(3,'items')
+ a.ldr(3,0x19350c);a.load(3,3);a.byte(0,3,load=True);a.ldr(2,FLAG+12);a.store(0,2);a.mov(0,1);a.byte(0,3)
  a.mov(0,0);a.store(0,4,16)
- for off,val in [(1,6),(12,len(CATALOG)),(7,20),(8,20),(4,5),(2,5),(3,6),(11,0)]:a.mov(0,val);a.byte(0,4,off)
+ for off,val in [(1,6),(7,20),(8,20),(4,4),(3,6),(11,0)]:a.mov(0,val);a.byte(0,4,off)
+ a.byte(6,4,12);a.ldr(3,FLAG+36);a.load(0,3);a.byte(0,4,2)
  for off,slot in [(28,0x5b4),(32,0x5b8),(36,0x1064)]:a.ldr(3,0x1924c4+slot);a.load(3,3);a.store(3,4,off)
- a.ldr(3,0x1924c4+0x598);a.load(3,3);a.store(4,3)
+ a.ldr(3,0x192a5c);a.load(3,3);a.store(4,3);a.ldr(3,FLAG+24);a.store(4,3)
  a.mov(0,0);a.bl(0x11fc90);a.reg(0,4);a.mov(1,0);a.bl(0x167ef0);a.reg(1,0)
  a.ldr(3,0x2aaa78);a.load(2,3);a.mov(0,0);a.bl(0x164b24)
- a.mov(0,0);a.ldr(1,TITLE);a.bl(0x168ec8)
- a.label('done');a.h(0xbc0c);a.reg(8,2);a.reg(10,3);a.h(0xbd70)
- patches.append((INIT,a.finish()))
+ a.mov(0,0);a.ldr(1,TITLE);a.bl(0x168ec8);a.branch('localdone')
+ a.label('release');a.reg(0,4);a.bl(0x1681a8)
+ a.label('failed');a.ldr(3,FLAG);a.mov(0,0);a.store(0,3);a.mov(0,3);a.bl(0x176fd8)
+ a.label('localdone');a.h(0xbc80);a.label('done');a.h(0xbc0c);a.reg(8,2);a.reg(10,3);a.h(0xbd70)
+ code=a.finish();assert BUILD_STOCK+len(code)<=CLEAR_STOCK;patches.append((BUILD_STOCK,code))
+ patches.append((INIT,padded(jump(BUILD_STOCK),256)))
  a=Asm(PRICE);a.h(0xb511);a.ldr(3,FLAG);a.load(3,3);a.cmp(3,0);a.cond(0,'normal')
  a.h(0x8902);a.h(0x0992);a.ldr(3,TABLE);a.mov(1,len(CATALOG))
- a.label('price');a.h(0x8818);a.h(0x4290);a.cond(0,'found');a.add(3,8);a.h(0x3901);a.cond(1,'price')
- a.branch('normal');a.label('found');a.load(0,3,4);a.h(0xb001);a.h(0xbd10)
+ a.label('price');a.half(0,3,load=True);cmpreg(a,0,2);a.cond(0,'found');a.add(3,4);a.h(0x3901);a.cond(1,'price')
+ a.branch('normal');a.label('found');a.half(0,3,2,load=True);a.ldr(1,1000);a.h(0x4348);a.h(0xb001);a.h(0xbd10)
  a.label('normal');a.h(0xbc11);a.h(0xbc08);a.reg(14,3);a.h(0xb570);a.reg(5,0);a.bl(0x149f00);a.ldr(3,0x14aed1);a.h(0x4718)
  patches.append((PRICE,a.finish()))
- a=Asm(CLEANUP);a.h(0xb510);a.ldr(4,FLAG);a.load(0,4);a.cmp(0,0);a.cond(0,'clean');a.ldr(3,0x1924c4+0x1048);a.load(3,3);a.load(0,4,12);a.byte(0,3);a.mov(0,0);a.store(0,4)
- a.label('clean');a.bl(0x13f8a4);a.h(0xbd10)
- patches.append((CLEANUP,a.finish()))
- patches +=[(TABLE,b''.join(struct.pack('<II',i,p) for i,p in CATALOG)),(TITLE,'로컬 골드 상점'.encode('cp949')+b'\0')]
- patches +=[(0x120890,jump(ENTRY)),(0x1205a8,jump(INIT)),(0x14aec8,jump(PRICE)),(0x11fec8,bl(0x11fec8,CLEANUP))]
+ # Match native cleanup's ownership rule: never free a retained buyback item.
+ a=Asm(CLEAR_STOCK);a.h(0xb570);a.ldr(4,FLAG);a.load(0,4);a.cmp(0,0);a.cond(0,'normal')
+ a.load(0,4,24);a.cmp(0,0);a.cond(0,'presentation');a.load(5,4,20);a.cmp(5,0);a.cond(0,'restore');a.load(6,4,32)
+ a.label('clear');a.load(0,5,4);a.cmp(0,0);a.cond(0,'empty');a.bl(0x13f7a8);a.cmp(0,0);a.cond(1,'empty');a.load(0,5,4);a.bl(0x147988)
+ a.label('empty');a.mov(0,1);a.store(0,5);a.mov(0,0);a.store(0,5,4);a.add(5,8);a.h(0x3e01);a.cond(1,'clear')
+ a.label('restore');a.load(0,4,16);a.cmp(0,0);a.cond(0,'presentation');a.ldr(3,0x1934f4);a.store(0,3)
+ a.label('presentation');a.ldr(3,0x19350c);a.load(3,3);a.load(0,4,12);a.byte(0,3);a.mov(0,0);a.store(0,4);a.store(0,4,24)
+ a.label('normal');a.bl(0x13f8a4);a.h(0xbd70)
+ code=a.finish();assert CLEAR_STOCK+len(code)<=NAVIGATE;patches.append((CLEAR_STOCK,code));patches.append((CLEANUP,padded(jump(CLEAR_STOCK),40)))
+ # The game's navigation arithmetic accepts full integers; its stock-widget
+ # wrapper narrows them to int8. Keep uint8 indices only for our exact widget.
+ a=Asm(NAVIGATE);a.ldr(3,FLAG+24);a.load(3,3);cmpreg(a,0,3);a.cond(0,'local')
+ a.h(0xb5f0);a.reg(6,0);a.mov(3,11);a.h(0x56f3);a.ldr(2,0x168285);a.h(0x4710)
+ a.label('local');a.h(0xb550);a.h(0xb083);a.reg(4,0);a.reg(6,1);a.byte(3,4,11,load=True);a.h(0x9301);a.h(0xab02);a.h(0x9300)
+ a.reg(0,6);a.byte(1,4,1,load=True);a.byte(2,4,2,load=True);a.h(0xab01);a.bl(0x14b35c);a.cmp(0,0);a.cond(0,'done')
+ a.h(0x9b01);a.byte(3,4,11);a.reg(0,4);a.bl(SCROLL);a.mov(0,1)
+ a.label('done');a.h(0xb003);a.h(0xbd50)
+ code=a.finish();assert NAVIGATE+len(code)<=SCROLL;patches.append((NAVIGATE,code));patches.append((0x16827c,jump(NAVIGATE)))
+ a=Asm(SCROLL);a.h(0xb570);a.reg(4,0);a.byte(0,4,11,load=True);a.byte(1,4,1,load=True);a.bl(0x183db4);a.reg(5,0)
+ a.byte(3,4,6,load=True);cmpreg(a,5,3);a.cond(3,'up');a.byte(2,4,4,load=True);a.h(0x189b);a.h(0x3b01);cmpreg(a,5,3);a.cond(9,'done')
+ subreg(a,5,5,2);a.add(5,1)
+ a.label('up');a.byte(5,4,6)
+ a.label('done');a.h(0xbd70)
+ code=a.finish();assert SCROLL+len(code)<=RESOLVE;patches.append((SCROLL,code))
+ a=Asm(RESOLVE);a.ldr(3,FLAG+24);a.load(3,3);cmpreg(a,0,3);a.cond(1,'original');a.h(0x0609);a.h(0x0e09)
+ a.label('original');a.h(0xb500);a.cmp(1,0);a.cond(10,'continue');a.mov(0,0);a.h(0xbd00)
+ a.label('continue');a.ldr(3,0x167efb);a.h(0x4718)
+ code=a.finish();assert RESOLVE+len(code)<=SELECT_R5;patches.append((RESOLVE,code));patches.append((0x167ef0,jump(RESOLVE)))
+ for address,reg,sites,end in [(SELECT_R5,5,(0x167f98,0x167fcc),SELECT_R0),(SELECT_R0,0,(0x120690,),SELECT_R6),(SELECT_R6,6,(0x120404,0x168280,0x1682a0),0x2add10)]:
+  a=Asm(address);a.h(0xb403);a.ldr(1,FLAG+24);a.load(1,1);cmpreg(a,reg,1);a.byte(3,reg,11,load=True);a.cond(0,'done');a.h(0x061b);a.h(0x161b)
+  a.label('done');a.h(0xbc03);a.h(0x4770);code=a.finish();assert address+len(code)<=end;patches.append((address,code))
+  # 0x168280 lies inside the displaced navigation prologue and is already
+  # represented by its whole-function guard; no overlapping patch is emitted.
+  for site in sites:
+   if site!=0x168280:patches.append((site,bl(site,address)))
+ # Four categories reuse the native merchant frame and list painter. The
+ # menu owns no stock items; OK initializes a category in the same state,
+ # and Clear returns to the category menu through native widget cleanup.
+ groups=[(221,27),(0,68),(68,132),(200,21)]
+ patches.append((CATEGORIES,b''.join(struct.pack('<III',TABLE+offset*4,count,(count+5)//6) for offset,count in groups)))
+ a=Asm(MENU_INIT);a.h(0xb510);a.bl(0x167e10);a.bl(0x16816c);a.reg(4,0);a.cmp(4,0);a.cond(0,'done')
+ a.bl(0x13f8a4);a.ldr(3,0x19350c);a.load(3,3);a.byte(0,3,load=True);a.ldr(2,FLAG+12);a.store(0,2);a.mov(0,1);a.byte(0,3)
+ for off,val in [(1,1),(2,4),(3,1),(4,4),(7,132),(8,20),(11,0),(12,4)]:a.mov(0,val);a.byte(0,4,off)
+ a.ldr(0,MENU_ITEMS);a.store(0,4,16);a.ldr(0,0x12066d);a.store(0,4,28)
+ a.ldr(3,0x192a5c);a.load(3,3);a.store(4,3);a.ldr(3,FLAG+24);a.mov(0,0);a.store(0,3);a.bl(0x11fc90)
+ a.mov(0,0);a.mov(1,0);a.ldr(3,0x2aaa78);a.load(2,3);a.bl(0x164b24);a.mov(0,0);a.ldr(1,TITLE);a.bl(0x168ec8)
+ a.label('done');a.h(0xbd10);code=a.finish();assert MENU_INIT+len(code)<=MENU_INPUT;patches.append((MENU_INIT,code))
+ a=Asm(MENU_INPUT);a.h(0xb570);a.reg(4,0);a.ldr(5,FLAG);a.load(0,5);a.cmp(0,0);a.cond(0,'original')
+ a.ldr(3,0x1928e8);a.load(6,3);a.load(0,6,72);cmpreg(a,4,0);a.cond(0,'back')
+ a.load(0,5,8);a.cmp(0,0);a.cond(0,'original')
+ a.load(0,6,16);cmpreg(a,4,0);a.cond(0,'choose')
+ a.ldr(3,0x192a5c);a.load(3,3);a.load(0,3);a.reg(1,4);a.bl(0x16827c);a.branch('done')
+ a.label('choose');a.ldr(3,0x192a5c);a.load(3,3);a.load(3,3);a.byte(0,3,11,load=True);a.cmp(0,3);a.cond(8,'done');a.store(0,5,4)
+ a.bl(0x11fec0);a.mov(0,1);a.store(0,5);a.mov(0,0);a.store(0,5,8);a.bl(BUILD_STOCK);a.branch('done')
+ a.label('back');a.load(6,5,8);a.bl(0x11fec0);a.cmp(6,0);a.cond(1,'leave')
+ a.mov(0,1);a.store(0,5);a.store(0,5,8);a.bl(MENU_INIT);a.branch('done')
+ a.label('leave');a.mov(0,0);a.store(0,5,8);a.mov(0,2);a.bl(0x176fd8);a.branch('done')
+ a.label('original');a.reg(0,4);a.h(0xbc70);a.h(0xbc08);a.reg(14,3)
+ a.h(0xb5f0);a.reg(7,10);a.reg(6,8);a.h(0xb4c0);a.ldr(3,0x1203a1);a.h(0x4718)
+ a.label('done');a.h(0xbd70);code=a.finish();assert MENU_INPUT+len(code)<=MENU_NAMES;patches.append((MENU_INPUT,code));patches.append((0x120398,jump(MENU_INPUT)))
+ # The existing title-scoped text dispatcher tail-calls this helper after
+ # handling class skillbook strings. Other text keeps its original lookup.
+ a=Asm(MENU_NAMES);a.ldr(2,FLAG+8);a.load(2,2);a.cmp(2,1);a.cond(1,'original');a.ldr(3,4961);subreg(a,2,0,3);a.cmp(2,3);a.cond(8,'original')
+ a.h(0x0092);a.ldr(3,MENU_TEXT);a.h(0x5898);a.h(0x4770)
+ a.label('original');a.h(0xb500);a.ldr(2,0x1924c4);a.ldr(3,0x1760);a.ldr(1,0x14fd15);a.h(0x4708)
+ code=a.finish();assert MENU_NAMES+len(code)<=MENU_ITEMS;patches.append((MENU_NAMES,code))
+ patches.append((MENU_ITEMS,struct.pack('<4I',28,29,30,31)))
+ names=['소비템','무기','장비','장신구'];data=bytearray();ptrs=[]
+ for name in names:ptrs.append(MENU_TEXT+16+len(data));data+=name.encode('cp949')+bytes([0])
+ data=struct.pack('<4I',*ptrs)+data;assert MENU_TEXT+len(data)<=0x2ae000;patches.append((MENU_TEXT,data))
+ patches += [(TABLE,b''.join(struct.pack('<HH',i,p//1000) for i,p in CATALOG)),(TITLE,'로컬 골드 상점'.encode('cp949')+b'\0')]
+ patches += [(0x120890,jump(ENTRY)),(0x1205a8,jump(INIT)),(0x14aec8,jump(PRICE)),(0x11fec8,bl(0x11fec8,CLEANUP))]
  return patches
 
-if __name__ == '__main__':
- for address, data in build():
-  print(f'{address:#08x}: {data.hex()}')
+if __name__=='__main__':
+ for address,data in build():print(f'{address:#08x}: {data.hex()}')
