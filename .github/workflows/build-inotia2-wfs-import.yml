@@ -1,4 +1,4 @@
-name: Inotia2 class sealed skillbooks unseal fix APK (install version 1018)
+name: Inotia2 inventory swap APK (install version 1019)
 
 on:
   push:
@@ -97,7 +97,8 @@ jobs:
           python3 ../aram-compat/.github/scripts/apply_inotia2_combat_safety.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_experience.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_skillbooks.py
-          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go ../aram-core/application/inotia2_combat*.go ../aram-core/application/inotia2_experience*.go ../aram-core/application/inotia2_skillbooks*.go
+          python3 ../aram-compat/.github/scripts/apply_inotia2_inventory_swap.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go ../aram-core/application/inotia2_combat*.go ../aram-core/application/inotia2_experience*.go ../aram-core/application/inotia2_skillbooks*.go ../aram-core/application/inotia2_inventory_swap*.go
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -127,7 +128,7 @@ jobs:
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
-        run: go test ./application -run '^TestInotia2(AutoIdentify|OfflineShop|SkillBooks|Experience|Combat|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoIdentify|InventorySwap|OfflineShop|SkillBooks|Experience|Combat|Frame)' -count=1 -v
 
       - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
@@ -244,7 +245,8 @@ jobs:
           python3 ../aram-compat/.github/scripts/apply_inotia2_combat_safety.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_experience.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_skillbooks.py
-          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go ../aram-core/application/inotia2_combat*.go ../aram-core/application/inotia2_experience*.go ../aram-core/application/inotia2_skillbooks*.go
+          python3 ../aram-compat/.github/scripts/apply_inotia2_inventory_swap.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go ../aram-core/application/inotia2_combat*.go ../aram-core/application/inotia2_experience*.go ../aram-core/application/inotia2_skillbooks*.go ../aram-core/application/inotia2_inventory_swap*.go
           gofmt -w \
             ../aram-core/application/machine.go \
             ../aram-core/application/machine_ktf.go \
@@ -285,7 +287,7 @@ jobs:
 
       - name: Verify complete combat frames and guest clock pacing
         working-directory: aram-core
-        run: go test ./application -run '^TestInotia2(AutoIdentify|OfflineShop|SkillBooks|Experience|Combat|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoIdentify|InventorySwap|OfflineShop|SkillBooks|Experience|Combat|Frame)' -count=1 -v
 
       - name: Test pickup scope, capacity and inventory discard/reapproach
         working-directory: aram-core
@@ -329,7 +331,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2ClassSkillBooksFix-${GITHUB_SHA::7}"
+          build_version="Inotia2InventorySwap-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -341,7 +343,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "runtime-baseline=v1008,installation-version=1018,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1019,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -359,15 +361,16 @@ jobs:
             echo "inotia2-class-skillbooks-menu=native-unseal-action,existing-class-items-usable"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
+            echo "inventory-movement=occupied-slot-swap-chain,native-empty-and-merge,owned-displaced-item"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-classbooksfix-1018-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-inventoryswap-1019-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1018"
+          ARAM_VERSION_CODE: "1019"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
@@ -438,7 +441,8 @@ jobs:
           python3 ../aram-compat/.github/scripts/apply_inotia2_combat_safety.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_experience.py
           python3 ../aram-compat/.github/scripts/apply_inotia2_skillbooks.py
-          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go ../aram-core/application/inotia2_combat*.go ../aram-core/application/inotia2_experience*.go ../aram-core/application/inotia2_skillbooks*.go
+          python3 ../aram-compat/.github/scripts/apply_inotia2_inventory_swap.py
+          gofmt -w ../aram-core/application/inotia2_offline_shop*.go ../aram-core/application/inotia2_autoidentify*.go ../aram-core/application/inotia2_combat*.go ../aram-core/application/inotia2_experience*.go ../aram-core/application/inotia2_skillbooks*.go ../aram-core/application/inotia2_inventory_swap*.go
       - name: Verify 16 KiB native executable page boundaries
         working-directory: aram-core
         env:
@@ -448,9 +452,10 @@ jobs:
         working-directory: aram-core
         env:
           GOWORK: off
-        run: go test ./application -run '^TestInotia2(AutoIdentify|OfflineShop|AutoLoot|SkillBooks|Experience|Combat|Frame)' -count=1 -v
+        run: go test ./application -run '^TestInotia2(AutoIdentify|InventorySwap|OfflineShop|AutoLoot|SkillBooks|Experience|Combat|Frame)' -count=1 -v
       - name: Native ARM and Thumb CPU regressions
         working-directory: aram-core
         env:
           GOWORK: off
         run: go test ./cpu/interpreter ./cpu/conformance -count=1
+
