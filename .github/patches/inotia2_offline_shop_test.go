@@ -252,6 +252,7 @@ func TestInotia2OfflineShopUnsignedSelectionAndScrolling(t *testing.T) {
 	inotia2DiscardBackends(t, func(t *testing.T, b cpu.Backend) {
 		shopTestCode(t, b)
 		discardWord(t, b, inotia2OfflineShopFlag+24, 0x210000)
+		discardWrite(t, b, 0x210000+12, []byte{132})
 		// Synthetic original resolver continuations expose the exact index ABI.
 		discardWrite(t, b, 0x167efa, inotia2PatchBytes("084600bd"))
 
@@ -300,6 +301,59 @@ func TestInotia2OfflineShopUnsignedSelectionAndScrolling(t *testing.T) {
 			shopRun(t, b, tc.pc)
 			discardCheckReg(t, b, cpu.RegisterR3, tc.want)
 			shopTestPreserved(t, b)
+		}
+	})
+}
+
+// A stock grid is rounded to whole rows. Its padding cells must never be
+// interpreted as item pointers, in either our local shop or an NPC shop.
+func TestInotia2OfflineShopEmptyCells(t *testing.T) {
+	inotia2DiscardBackends(t, func(t *testing.T, b cpu.Backend) {
+		shopTestCode(t, b)
+		// Authored stand-in for native array resolution. Its bounds branch uses
+		// the displaced null-return address, reproducing the v1020 regression.
+		discardWrite(t, b, 0x167efa, inotia2PatchBytes("037b9942fada02698b00985800bd"))
+		for _, tc := range []struct {
+			name  string
+			count uint32
+			local bool
+		}{
+			{"consumables", 27, true}, {"weapons", 68, true}, {"accessories", 21, true},
+			{"NPC weapon shop", 17, false}, {"NPC armor shop", 33, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				widget := uint32(0x210000)
+				scoped := uint32(0)
+				if tc.local {
+					scoped = widget
+				}
+				discardWord(t, b, inotia2OfflineShopFlag+24, scoped)
+				discardWrite(t, b, widget+12, []byte{byte(tc.count)})
+				discardWord(t, b, widget+16, 0x220000)
+				discardWord(t, b, 0x220000+(tc.count-1)*4, 0x230000)
+				for index := tc.count; index < ((tc.count+5)/6)*6; index++ {
+					discardReg(t, b, cpu.RegisterLR, 0x200101)
+					discardReg(t, b, cpu.RegisterR0, widget)
+					discardReg(t, b, cpu.RegisterR1, index)
+					shopRun(t, b, 0x167ef0)
+					discardCheckReg(t, b, cpu.RegisterR0, 0)
+					shopTestPreserved(t, b)
+				}
+				for _, index := range []uint32{tc.count, 255, 0xffffffff} {
+					discardReg(t, b, cpu.RegisterLR, 0x200101)
+					discardReg(t, b, cpu.RegisterR0, widget)
+					discardReg(t, b, cpu.RegisterR1, index)
+					shopRun(t, b, 0x167ef0)
+					discardCheckReg(t, b, cpu.RegisterR0, 0)
+					shopTestPreserved(t, b)
+				}
+				discardReg(t, b, cpu.RegisterLR, 0x200101)
+				discardReg(t, b, cpu.RegisterR0, widget)
+				discardReg(t, b, cpu.RegisterR1, tc.count-1)
+				shopRun(t, b, 0x167ef0)
+				discardCheckReg(t, b, cpu.RegisterR0, 0x230000)
+				shopTestPreserved(t, b)
+			})
 		}
 	})
 }

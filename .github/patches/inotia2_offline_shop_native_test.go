@@ -26,5 +26,6 @@ func TestInotia2OfflineShopNativeCPU(t *testing.T) {
 	t.Run("entry and cleanup", TestInotia2OfflineShopEntryCleanup)
 	t.Run("stock", TestInotia2OfflineShopStockInitialization)
 	t.Run("unsigned selection and scrolling", TestInotia2OfflineShopUnsignedSelectionAndScrolling)
+	t.Run("empty local and NPC cells", TestInotia2OfflineShopEmptyCells)
 	t.Run("installation guards", TestInotia2OfflineShopInstallationGuards)
 }

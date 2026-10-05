@@ -13,7 +13,7 @@ definition = (ROOT / ".github/patches/inotia2_offline_shop.go").read_text()
 emitted = [
     (int(address, 16), bytes.fromhex(data))
     for address, data in re.findall(
-        r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", legacySHA: "[0-9a-f]+", previousSHA: "[0-9a-f]+", recentSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)',
+        r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", legacySHA: "[0-9a-f]+", previousSHA: "[0-9a-f]+", recentSHA: "[0-9a-f]+", catalogSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)',
         definition,
     )
 ]
@@ -38,7 +38,7 @@ for name in (
     "inotia2_offline_shop_native_test.go",
 ):
     (CORE / name).write_text((ROOT / ".github/patches" / name).read_text())
-print("Installed guarded four-category 248-product local gold shop; native transactions and v1019 state compatibility retained")
+print("Installed guarded four-category 248-product local gold shop; native transactions and v1019/v1020 state compatibility retained")
 
 state = CORE / "state.go"
 source = state.read_text()
