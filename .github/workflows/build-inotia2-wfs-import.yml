@@ -1,4 +1,4 @@
-name: Inotia2 category gold shop APK (install version 1021)
+name: Inotia2 tiered experience APK (install version 1022)
 
 on:
   push:
@@ -343,7 +343,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "runtime-baseline=v1008,installation-version=1021,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1022,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -356,7 +356,7 @@ jobs:
             echo "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
             echo "inotia2-combat-targets=missing-current-index-selects-best,no-invalid-threat-table-read"
             echo "inotia2-combat-geometry=equivalent-signed16-intersection,exact-client-guard,no-frame-poll"
-            echo "inotia2-monster-experience=level-41-plus,4x-final-reward,quest-rewards-unchanged,no-frame-poll"
+            echo "inotia2-monster-experience=monster-level-41:4x-51:5x-61:6x-71:8x-81:10x-91:12x,final-reward,quest-rewards-unchanged,no-frame-poll"
             echo "inotia2-class-skillbooks=six-native-item-ids,class-only-random,native-capacity,save-persistent,original-seal-unchanged"
             echo "inotia2-class-skillbooks-menu=native-unseal-action,existing-class-items-usable"
             echo "save-backup=wfs-when-lossless"
@@ -365,12 +365,12 @@ jobs:
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-categoryshop-1021-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-exptiers-1022-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1021"
+          ARAM_VERSION_CODE: "1022"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
@@ -390,7 +390,7 @@ jobs:
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-pickup=selected-hero,native-capacity,quiet-full,zip-identity-unchanged"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-offline-shop=four-categories,248-local-products,221-unique-epic-equipment,subtype-level-order,empty-cell-bounds,one-gold-equipment,chaos-dice,4-visible-rows,native-scrollbar,native-transaction,exact-client-guard"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
-          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-monster-experience=level-41-plus,4x-final-reward,quest-rewards-unchanged,no-frame-poll"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-monster-experience=monster-level-41:4x-51:5x-61:6x-71:8x-81:10x-91:12x,final-reward,quest-rewards-unchanged,no-frame-poll"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-class-skillbooks=six-native-item-ids,class-only-random,native-capacity,save-persistent,original-seal-unchanged"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-class-skillbooks-menu=native-unseal-action,existing-class-items-usable"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"

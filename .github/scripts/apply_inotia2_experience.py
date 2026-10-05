@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT.parent / 'aram-core' / 'application'
 definition = (ROOT / '.github/patches/inotia2_experience.go').read_text()
 emitted = [(int(a,16),bytes.fromhex(b)) for a,b in re.findall(
-    r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)', definition)]
+    r'address: (0x[0-9a-f]+), originalSHA: "[0-9a-f]+", recentSHA: "[0-9a-f]+", replacement: inotia2PatchBytes\("([0-9a-f]+)"\)', definition)]
 if emitted != build():
     raise SystemExit('Experience wrapper differs from authored assembly')
 
@@ -37,4 +37,4 @@ if new not in source:
 for suffix in ('.go','_test.go','_native_test.go'):
     name = 'inotia2_experience' + suffix
     (CORE / name).write_text((ROOT / '.github/patches' / name).read_text())
-print('Installed final monster experience x4 for native level >=41; quests unchanged')
+print('Installed final monster experience tiers 41:4x,51:5x,61:6x,71:8x,81:10x,91:12x; quests unchanged')
