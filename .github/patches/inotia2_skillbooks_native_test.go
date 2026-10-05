@@ -23,6 +23,7 @@ func TestInotia2SkillBooksNativeCPU(t *testing.T) {
 		}
 	})
 	t.Run("class selection and capacity", TestInotia2SkillBooksClassSelectionAndCapacity)
+	t.Run("inventory unseal menu", TestInotia2SkillBooksInventoryUnsealMenu)
 	t.Run("names and fallback", TestInotia2SkillBooksNamesAndOriginalFallback)
 	t.Run("table extension", TestInotia2SkillBooksExtendNativeDefinitions)
 	t.Run("constructor and bootstrap", TestInotia2SkillBooksConstructorBootstrapAndTextABI)

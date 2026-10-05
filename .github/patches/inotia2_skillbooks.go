@@ -9,6 +9,7 @@ import (
 const inotia2SkillBooksEnsure = uint32(0x2aea40)
 const inotia2SkillBooksUse = uint32(0x2aeb60)
 const inotia2SkillBooksName = uint32(0x2aec10)
+const inotia2SkillBooksMenu = uint32(0x2aef00)
 
 // Six distinct native item IDs retain normal purchase, stack, discard and save
 // serialization. Only the known client's startup and item routines are hooked.
@@ -29,12 +30,22 @@ var inotia2SkillBooksPatches = []inotia2OfflineShopPatch{
 	{address: 0x14fd0c, originalSHA: "4aa78371501c1169e4cc6162102409dac9be79ccdd061d01835acc34f6beddbf", replacement: inotia2PatchBytes("004b184751ec2a00")},
 }
 
+// Install separately so full states saved with the v1017 item hooks can receive
+// the new inventory-menu hook without being rejected as a partial installation.
+var inotia2SkillBooksMenuPatches = []inotia2OfflineShopPatch{
+	{address: 0x2aef00, originalSHA: "9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0", replacement: inotia2PatchBytes("034bc21a052a01d801207047014b1847ca030000197a1400")},
+	{address: 0x111422, originalSHA: "7575fdb9b91fbc20da01a6c12e27a23b2aae3c8886c0d9b328da4414f21be8b3", replacement: inotia2PatchBytes("9df16dfd")},
+}
+
 func installInotia2SkillBooks(client []byte, backend cpu.Backend) error {
 	if fmt.Sprintf("%x", sha256.Sum256(client)) != inotia2AutoLootPatchedSHA {
 		return nil
 	}
 	if err := installInotia2OfflineShopPatches(backend, inotia2SkillBooksPatches); err != nil {
 		return fmt.Errorf("Inotia2 class sealed skillbooks: %w", err)
+	}
+	if err := installInotia2OfflineShopPatches(backend, inotia2SkillBooksMenuPatches); err != nil {
+		return fmt.Errorf("Inotia2 class sealed skillbooks inventory menu: %w", err)
 	}
 	return nil
 }

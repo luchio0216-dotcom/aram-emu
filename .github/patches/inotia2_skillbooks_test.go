@@ -27,6 +27,34 @@ func TestInotia2SkillBooksUnknownTitle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInotia2SkillBooksInventoryUnsealMenu(t *testing.T) {
+	inotia2DiscardBackends(t, func(t *testing.T, b cpu.Backend) {
+		skillBooksTestCode(t, b)
+		for _, p := range inotia2SkillBooksMenuPatches {
+			discardWrite(t, b, p.address, p.replacement)
+		}
+		// Exercise the replaced menu callsite, not only the result generator.
+		// Non-class items must still execute the original predicate. Its authored
+		// stand-in returns a sentinel to distinguish fallback from acceptance.
+		discardWrite(t, b, 0x147a18, []byte{77, 0x20, 0x70, 0x47})
+		discardWrite(t, b, 0x111426, []byte{0, 0xbe})
+		for _, id := range []uint32{0, 813, 836, 837, 838, 839, 969, 970, 971, 972, 973, 974, 975, 976, 1023} {
+			discardReg(t, b, cpu.RegisterLR, 0x200101)
+			discardReg(t, b, cpu.RegisterR0, id)
+			discardReg(t, b, cpu.RegisterR1, 0x11111111)
+			discardRun(t, b, 0x111422)
+			want := uint32(77)
+			if id >= 970 && id <= 975 {
+				want = 1
+			}
+			discardCheckReg(t, b, cpu.RegisterR0, want)
+			discardCheckReg(t, b, cpu.RegisterR1, 0x11111111)
+			skillBooksPreserved(t, b)
+		}
+	})
+}
+
 func TestInotia2SkillBooksClassSelectionAndCapacity(t *testing.T) {
 	for class := uint32(0); class < 6; class++ {
 		for ordinal := uint32(0); ordinal < 12; ordinal++ {

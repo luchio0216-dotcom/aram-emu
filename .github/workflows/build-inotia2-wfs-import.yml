@@ -1,4 +1,4 @@
-name: Inotia2 class sealed skillbooks APK (install version 1017)
+name: Inotia2 class sealed skillbooks unseal fix APK (install version 1018)
 
 on:
   push:
@@ -329,7 +329,7 @@ jobs:
           ebiten_version="$(go list -m -f '{{.Version}}' github.com/hajimehoshi/ebiten/v2)"
           go install "github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@${ebiten_version}"
           mkdir -p android/app/libs android/app/src/main/assets
-          build_version="Inotia2ClassSkillBooks-${GITHUB_SHA::7}"
+          build_version="Inotia2ClassSkillBooksFix-${GITHUB_SHA::7}"
           ebitenmobile bind \
             -target android/arm64,android/amd64 \
             -androidapi 23 \
@@ -341,7 +341,7 @@ jobs:
           {
             echo "aram-emu=${EMU_REF}"
             echo "release-workflow=${GITHUB_SHA}"
-            echo "runtime-baseline=v1008,installation-version=1017,existing-app-data-preserved"
+            echo "runtime-baseline=v1008,installation-version=1018,existing-app-data-preserved"
             echo "aram-core=${CORE_REF}"
             echo "aram-frontend=${FRONTEND_REF}"
             echo "inotia1-direction-fix=core-clet-held-edges"
@@ -356,17 +356,18 @@ jobs:
             echo "inotia2-combat-geometry=equivalent-signed16-intersection,exact-client-guard,no-frame-poll"
             echo "inotia2-monster-experience=level-41-plus,4x-final-reward,quest-rewards-unchanged,no-frame-poll"
             echo "inotia2-class-skillbooks=six-native-item-ids,class-only-random,native-capacity,save-persistent,original-seal-unchanged"
+            echo "inotia2-class-skillbooks-menu=native-unseal-action,existing-class-items-usable"
             echo "save-backup=wfs-when-lossless"
             echo "save-restore=restart-after-import"
             echo "wfeature-save-import=verified-title-aliases,package-certificate,unchanged-save-slots"
             echo "test-setup=virtual-keypad-on,touch-overlay-off,in-game-setting1"
           } > android/app/src/main/assets/BUILD-INFO.txt
-          echo "ARAM_VERSION_NAME=1008-classbooks-1017-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
+          echo "ARAM_VERSION_NAME=1008-classbooksfix-1018-${GITHUB_SHA::7}" >> "${GITHUB_ENV}"
 
       - name: Build Android APK
         working-directory: aram-emu
         env:
-          ARAM_VERSION_CODE: "1017"
+          ARAM_VERSION_CODE: "1018"
         run: |
           gradle --no-daemon --stacktrace -p android \
             :app:lintGithubDebug :app:assembleGithubDebug
@@ -388,6 +389,7 @@ jobs:
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-auto-identify=native-scroll-action,capacity-accepted,stock-unchanged,no-frame-poll"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-monster-experience=level-41-plus,4x-final-reward,quest-rewards-unchanged,no-frame-poll"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-class-skillbooks=six-native-item-ids,class-only-random,native-capacity,save-persistent,original-seal-unchanged"
+          unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "inotia2-class-skillbooks-menu=native-unseal-action,existing-class-items-usable"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-backup=wfs-when-lossless"
           unzip -p "${apk}" assets/BUILD-INFO.txt | grep -Fx "save-restore=restart-after-import"
 

@@ -11,6 +11,7 @@ NAME=0x2aec10
 STRING=0x2aec50
 TEXT_TABLE=0x2aec80
 TEXT=0x2aed00
+MENU=0x2aef00
 FIRST=970
 COUNT=976
 CLASSES=['바바리안','템플러','로그','쉐도우헌터','프리스트','아크메이지']
@@ -64,9 +65,17 @@ def build():
  texts=[f'봉인된 스킬북({c})' for c in CLASSES]+[f'사용하면 {c}의 스킬북 하나를 무작위로 얻습니다.' for c in CLASSES]
  data=bytearray();pointers=[]
  for t in texts:pointers.append(TEXT+len(data));data+=t.encode('cp949')+b'\0'
- assert TEXT+len(data)<=0x2af000
+ assert TEXT+len(data)<=MENU
  patches.extend([(TEXT_TABLE,struct.pack('<12I',*pointers)),(TEXT,bytes(data))])
  patches.extend([(0x1450be,bl(0x1450be,BOOT)),(0x14a0bc,jump(CREATE)),(0x14a528,jump(USE)),(0x148c9c,jump(NAME)),(0x14fd0c,jump(STRING))])
+ # The native inventory menu uses a separate whitelist from the use routine.
+ # Accept the six class seals there without changing the selected item ID;
+ # action 40 then follows the native capacity, use and one-item consumption path.
+ a=Asm(MENU);a.ldr(3,FIRST);sub(a,2,0,3);a.cmp(2,5);a.cond(8,'original')
+ a.mov(0,1);a.h(0x4770)
+ a.label('original');a.ldr(3,0x147a19);a.h(0x4718)
+ code=a.finish();assert MENU+len(code)<=0x2af000
+ patches.extend([(MENU,code),(0x111422,bl(0x111422,MENU))])
  return patches
 
 if __name__=='__main__':
